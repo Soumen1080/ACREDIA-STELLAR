@@ -40,6 +40,12 @@ const INSTANCE_THRESHOLD: u32 = 3_110_400;
 // MAINNET_CHECKLIST.md).
 const MAX_BATCH_SIZE: u32 = 20;
 
+// Issuer profile size caps (see IssuerProfile) — kept small and fixed so an
+// issuer's identity binding stays a cheap, bounded-size persistent entry
+// rather than an open-ended storage/TTL liability.
+const MAX_ISSUER_NAME_LEN: u32 = 64;
+const MAX_ISSUER_PROFILE_URI_LEN: u32 = 256;
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u32)]
@@ -56,6 +62,7 @@ pub enum ContractError {
     ContractPaused = 10,
     BatchTooLarge = 11,
     EmptyBatch = 12,
+    ProfileTooLarge = 13,
 }
 
 #[contracttype]
@@ -70,6 +77,7 @@ pub enum DataKey {
     TotalCredentials,
     StorageVersion,
     Paused,
+    IssuerProfile(Address),
 }
 
 #[contracttype]
@@ -107,6 +115,22 @@ pub struct BatchIssueResult {
     pub success: bool,
     pub token_id: u64,
     pub error_code: u32,
+}
+
+/// Minimal on-chain binding from an authorized issuer's address to a
+/// human-readable identity. `name` is a short display handle read directly
+/// from chain state (no off-chain fetch needed for a quick trust check);
+/// `profile_uri` optionally points to a richer, off-chain-signed issuer
+/// profile document (e.g. an `ipfs://` URI) for deeper verification —
+/// mirrors how `Credential.ipfs_hash` anchors a credential's own metadata.
+/// Both fields are length-capped (see MAX_ISSUER_NAME_LEN /
+/// MAX_ISSUER_PROFILE_URI_LEN) to keep per-issuer storage/TTL cost small.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IssuerProfile {
+    pub name: String,
+    pub profile_uri: String,
+    pub updated_at: u64,
 }
 
 #[contract]
@@ -156,6 +180,15 @@ fn extend_credential_ttl(env: &Env, token_id: u64, credential_hash: &BytesN<32>)
 fn extend_total_credentials_ttl(env: &Env) {
     env.storage().persistent().extend_ttl(
         &DataKey::TotalCredentials,
+        PERSISTENT_THRESHOLD,
+        PERSISTENT_BUMP_AMOUNT,
+    );
+}
+
+/// Extend the TTL of a single issuer's profile entry.
+fn extend_issuer_profile_ttl(env: &Env, issuer: &Address) {
+    env.storage().persistent().extend_ttl(
+        &DataKey::IssuerProfile(issuer.clone()),
         PERSISTENT_THRESHOLD,
         PERSISTENT_BUMP_AMOUNT,
     );
@@ -328,6 +361,66 @@ impl AcrediaCredential {
         require_initialized(&env);
         extend_instance_ttl(&env);
         check_and_extend_authorization(&env, &issuer)
+    }
+
+    /// Publish or update the calling issuer's minimal on-chain identity
+    /// binding. Self-service by design (the issuer signs, not the owner) —
+    /// authorization (who *can* issue) and profile (how they *identify*) are
+    /// deliberately separate concerns. Requires the caller to be currently
+    /// authorized, so profile storage can't be spammed by arbitrary
+    /// addresses. Revoking an issuer's authorization does not clear their
+    /// profile (see revoke_issuer) — past credentials should still resolve
+    /// to the identity that issued them — it just blocks further updates
+    /// until re-authorized.
+    pub fn set_issuer_profile(
+        env: Env,
+        issuer: Address,
+        name: String,
+        profile_uri: String,
+    ) -> Result<(), ContractError> {
+        issuer.require_auth();
+
+        if !check_and_extend_authorization(&env, &issuer) {
+            return Err(ContractError::IssuerNotAuthorized);
+        }
+
+        if name.len() > MAX_ISSUER_NAME_LEN || profile_uri.len() > MAX_ISSUER_PROFILE_URI_LEN {
+            return Err(ContractError::ProfileTooLarge);
+        }
+
+        let updated_at = env.ledger().timestamp();
+        let profile = IssuerProfile {
+            name: name.clone(),
+            profile_uri: profile_uri.clone(),
+            updated_at,
+        };
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::IssuerProfile(issuer.clone()), &profile);
+        extend_issuer_profile_ttl(&env, &issuer);
+        extend_instance_ttl(&env);
+
+        env.events().publish(
+            (symbol_short!("iss_prof"), issuer),
+            (name, profile_uri, updated_at),
+        );
+
+        Ok(())
+    }
+
+    /// Resolve an issuer address to its on-chain identity binding, if any
+    /// has been published. Returns `None` for an issuer that never called
+    /// `set_issuer_profile` — this is a distinct, weaker state than "not
+    /// authorized" (an authorized issuer may simply not have a profile yet).
+    pub fn get_issuer_profile(env: Env, issuer: Address) -> Option<IssuerProfile> {
+        extend_instance_ttl(&env);
+        let profile: IssuerProfile = env
+            .storage()
+            .persistent()
+            .get(&DataKey::IssuerProfile(issuer.clone()))?;
+        extend_issuer_profile_ttl(&env, &issuer);
+        Some(profile)
     }
 
     pub fn issue_credential(
@@ -1357,6 +1450,190 @@ mod tests {
             last_event_topics(&env),
             vec![&env, symbol_short!("iss_rev").into_val(&env)]
         );
+    }
+
+    // Issuer profile
+
+    /// Builds a length-`len` ASCII string without needing `alloc`/`std` —
+    /// unlike proptest_invariants below, this module isn't linked against
+    /// them, so no `.repeat()`/`format!`.
+    fn dummy_long_str(env: &Env, len: usize) -> String {
+        const BUF: [u8; 300] = [b'a'; 300];
+        String::from_str(env, core::str::from_utf8(&BUF[..len]).unwrap())
+    }
+
+    #[test]
+    fn test_set_and_get_issuer_profile() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            let name = String::from_str(&env, "Acredia University");
+            let uri = String::from_str(&env, "ipfs://bafy-profile");
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                name.clone(),
+                uri.clone(),
+            )
+            .unwrap();
+
+            let profile = AcrediaCredential::get_issuer_profile(env.clone(), issuer).unwrap();
+            assert_eq!(profile.name, name);
+            assert_eq!(profile.profile_uri, uri);
+            assert_eq!(profile.updated_at, env.ledger().timestamp());
+        });
+    }
+
+    #[test]
+    fn test_get_issuer_profile_none_when_unset() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            assert!(AcrediaCredential::get_issuer_profile(env.clone(), issuer).is_none());
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_emits_event() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                String::from_str(&env, "Acredia University"),
+                String::from_str(&env, "ipfs://bafy-profile"),
+            )
+            .unwrap();
+        });
+
+        assert_eq!(
+            last_event_topics(&env),
+            vec![
+                &env,
+                symbol_short!("iss_prof").into_val(&env),
+                issuer.into_val(&env),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_set_issuer_profile_update_overwrites_previous() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                String::from_str(&env, "Old Name"),
+                String::from_str(&env, "ipfs://old"),
+            )
+            .unwrap();
+        });
+        env.as_contract(&contract, || {
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                String::from_str(&env, "New Name"),
+                String::from_str(&env, "ipfs://new"),
+            )
+            .unwrap();
+        });
+
+        env.as_contract(&contract, || {
+            let profile = AcrediaCredential::get_issuer_profile(env.clone(), issuer).unwrap();
+            assert_eq!(profile.name, String::from_str(&env, "New Name"));
+            assert_eq!(profile.profile_uri, String::from_str(&env, "ipfs://new"));
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_requires_authorized_issuer() {
+        let (env, contract, _, _, _) = setup();
+        let rogue = Address::generate(&env);
+        env.as_contract(&contract, || {
+            let result = AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                rogue,
+                String::from_str(&env, "Fake U"),
+                String::from_str(&env, ""),
+            );
+            assert_eq!(result, Err(ContractError::IssuerNotAuthorized));
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_rejects_oversized_name() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            let long_name = dummy_long_str(&env, (MAX_ISSUER_NAME_LEN + 1) as usize);
+            let result = AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer,
+                long_name,
+                String::from_str(&env, ""),
+            );
+            assert_eq!(result, Err(ContractError::ProfileTooLarge));
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_rejects_oversized_uri() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            let long_uri = dummy_long_str(&env, (MAX_ISSUER_PROFILE_URI_LEN + 1) as usize);
+            let result = AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer,
+                String::from_str(&env, "Fine"),
+                long_uri,
+            );
+            assert_eq!(result, Err(ContractError::ProfileTooLarge));
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_requires_issuer_auth() {
+        let (env, contract, _, issuer, _) = setup();
+        let client = AcrediaCredentialClient::new(&env, &contract);
+        let name = String::from_str(&env, "Acredia University");
+        let uri = String::from_str(&env, "ipfs://bafy-profile");
+
+        env.set_auths(&[]);
+        assert!(client.try_set_issuer_profile(&issuer, &name, &uri).is_err());
+
+        env.mock_all_auths();
+        assert!(client.get_issuer_profile(&issuer).is_none());
+    }
+
+    #[test]
+    fn test_issuer_profile_survives_revocation_but_blocks_further_updates() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                String::from_str(&env, "Acredia University"),
+                String::from_str(&env, "ipfs://bafy-profile"),
+            )
+            .unwrap();
+        });
+
+        env.as_contract(&contract, || {
+            AcrediaCredential::revoke_issuer(env.clone(), issuer.clone());
+        });
+
+        env.as_contract(&contract, || {
+            // Past identity binding is still resolvable after revocation...
+            let profile =
+                AcrediaCredential::get_issuer_profile(env.clone(), issuer.clone()).unwrap();
+            assert_eq!(profile.name, String::from_str(&env, "Acredia University"));
+
+            // ...but the now-unauthorized issuer can no longer update it.
+            let result = AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer,
+                String::from_str(&env, "New Name"),
+                String::from_str(&env, "ipfs://new"),
+            );
+            assert_eq!(result, Err(ContractError::IssuerNotAuthorized));
+        });
     }
 
     // Totals
