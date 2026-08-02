@@ -24,6 +24,10 @@ export default tseslint.config(
       ...nextPlugin.configs['core-web-vitals'].rules,
       ...jsxA11y.flatConfigs.recommended.rules,
       "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_", "caughtErrors": "none" }
+      ],
       "no-console": "error"
     },
   },
@@ -47,6 +51,8 @@ export default tseslint.config(
       "node_modules/",
       "dist/",
       "build/",
+      "scripts/",
+      "public/",
     ]
   }
 );

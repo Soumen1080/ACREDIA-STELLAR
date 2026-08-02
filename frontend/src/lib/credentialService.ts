@@ -205,7 +205,7 @@ export async function issueCredential(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ type: 'issued', tokenId }),
-        }).catch(err => console.error('Failed to trigger email:', err));
+        }).catch((err) => captureException(err, { context: 'triggerIssuedEmail' }));
 
         return {
             tokenId,
