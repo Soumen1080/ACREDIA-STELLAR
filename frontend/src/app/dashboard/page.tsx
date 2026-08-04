@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, BarChart2, List, Shield, Upload, User, Wallet } from 'lucide-react';
+import { ArrowRight, BarChart2, FileSpreadsheet, List, Shield, Upload, User, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { CredentialUploadForm } from '@/components/institution/CredentialUploadForm';
+import { BatchCredentialImport } from '@/components/institution/BatchCredentialImport';
 import { InstitutionAnalytics } from '@/components/institution/InstitutionAnalytics';
 import { IssuedCredentialsList } from '@/components/institution/IssuedCredentialsList';
 import StudentCredentialsList from '@/components/student/StudentCredentialsList';
@@ -276,10 +277,14 @@ function DashboardContent() {
 
                     {institutionId && (
                         <Tabs defaultValue="issue" className="w-full">
-                            <TabsList className="grid w-full max-w-lg grid-cols-3">
+                            <TabsList className="grid w-full max-w-2xl grid-cols-4">
                                 <TabsTrigger value="issue" className="gap-2">
                                     <Upload className="h-4 w-4" />
                                     Issue credential
+                                </TabsTrigger>
+                                <TabsTrigger value="bulk-import" className="gap-2">
+                                    <FileSpreadsheet className="h-4 w-4" />
+                                    Bulk import
                                 </TabsTrigger>
                                 <TabsTrigger value="view" className="gap-2">
                                     <List className="h-4 w-4" />
@@ -294,6 +299,27 @@ function DashboardContent() {
                             <TabsContent value="issue" className="mt-6">
                                 {institutionStatus === 'verified' ? (
                                     <CredentialUploadForm
+                                        institutionId={institutionId}
+                                        institutionName={institutionName}
+                                        institutionWallet={institutionWallet}
+                                        account={address}
+                                        onSuccess={handleCredentialIssued}
+                                    />
+                                ) : (
+                                    <Card className="p-8 text-center border-warning/25 bg-warning/8">
+                                        <Shield className="mx-auto mb-4 h-12 w-12 text-warning" />
+                                        <h3 className="text-lg font-bold text-foreground">Verification Required</h3>
+                                        <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+                                            Your institution account status is currently <strong>{institutionStatus}</strong>.
+                                            You must be approved by an administrator and verified on-chain before you can issue academic credentials.
+                                        </p>
+                                    </Card>
+                                )}
+                            </TabsContent>
+
+                            <TabsContent value="bulk-import" className="mt-6">
+                                {institutionStatus === 'verified' ? (
+                                    <BatchCredentialImport
                                         institutionId={institutionId}
                                         institutionName={institutionName}
                                         institutionWallet={institutionWallet}

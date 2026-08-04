@@ -1,5 +1,6 @@
-import 'dotenv/config'; // Load .env.local if running directly
-import { rpc, xdr, scValToNative, Address } from '@stellar/stellar-sdk';
+import { config as loadEnv } from 'dotenv';
+loadEnv({ quiet: true }); // Load .env if running directly
+import { rpc, scValToNative } from '@stellar/stellar-sdk';
 import { createClient } from '@supabase/supabase-js';
 
 const RPC_URL = process.env.NEXT_PUBLIC_SOROBAN_RPC_URL;
@@ -11,6 +12,9 @@ if (!RPC_URL || !CONTRACT_ID || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     console.error('Missing required environment variables');
     process.exit(1);
 }
+
+// Narrowed after the env guard above so nested closures see a definite string.
+const contractId: string = CONTRACT_ID;
 
 const server = new rpc.Server(RPC_URL);
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
@@ -28,12 +32,16 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 async function processEvent(event: rpc.Api.EventResponse) {
-    if (event.type !== 'contract' || event.contractId !== CONTRACT_ID) return;
+    // The getEvents filter already restricts results to our contract, so we only
+    // need to guard the event kind here.
+    if (event.type !== 'contract') return;
 
     try {
-        const topics = event.topic.map((val) => scValToNative(xdr.ScVal.fromXDR(val, 'base64')));
+        // In @stellar/stellar-sdk v15, getEvents already decodes topic/value to
+        // xdr.ScVal — pass them straight to scValToNative (no base64 fromXDR).
+        const topics = event.topic.map((val) => scValToNative(val));
         const eventName = topics[0]?.toString();
-        const data = scValToNative(xdr.ScVal.fromXDR(event.value, 'base64'));
+        const data = scValToNative(event.value);
 
         console.log(`Processing event: ${eventName} at ledger ${event.ledger}`);
 
@@ -76,7 +84,7 @@ async function processEvent(event: rpc.Api.EventResponse) {
                     ipfs_hash: ipfsHash,
                     blockchain_hash: credentialHash,
                     metadata: {}, // Empty for indexed-only ones if not known
-                    issued_at: new Date(Number(event.ledgerClosedAt)).toISOString(),
+                    issued_at: new Date(event.ledgerClosedAt).toISOString(),
                     revoked: false
                 }, { onConflict: 'token_id' });
             
@@ -85,7 +93,7 @@ async function processEvent(event: rpc.Api.EventResponse) {
             const tokenId = topics[1]?.toString();
             const { error } = await supabase
                 .from('credentials')
-                .update({ revoked: true, revoked_at: new Date(Number(event.ledgerClosedAt)).toISOString() })
+                .update({ revoked: true, revoked_at: new Date(event.ledgerClosedAt).toISOString() })
                 .eq('token_id', tokenId);
             
             if (error) console.error('Error revoking credential:', error);
@@ -145,25 +153,29 @@ async function run() {
             let endLedger = Math.min(startLedger + MAX_LEDGER_RANGE, networkLatestLedger);
             console.log(`Syncing ledgers ${startLedger} to ${endLedger}`);
 
-            let cursor = undefined;
+            let cursor: string | undefined = undefined;
             let eventsProcessed = 0;
             let hasMore = true;
 
             while (hasMore) {
-                const eventsResponse = await server.getEvents({
-                    startLedger,
-                    filters: [{ type: 'contract', contractIds: [CONTRACT_ID] }],
-                    limit: EVENT_BATCH_SIZE,
+                const filters = [{ type: 'contract' as const, contractIds: [contractId] }];
+                // The RPC accepts exactly one of startLedger / cursor — use the
+                // cursor for pagination once we have one, else the start ledger.
+                const eventsResponse = await server.getEvents(
                     cursor
-                });
+                        ? { filters, limit: EVENT_BATCH_SIZE, cursor }
+                        : { startLedger, filters, limit: EVENT_BATCH_SIZE },
+                );
 
-                for (const event of eventsResponse.records) {
+                const events = eventsResponse.events;
+                for (const event of events) {
                     await processEvent(event);
                     eventsProcessed++;
                 }
 
-                if (eventsResponse.records.length > 0) {
-                    cursor = eventsResponse.records[eventsResponse.records.length - 1].pagingToken;
+                if (events.length > 0) {
+                    // Resume the next page from the response-level cursor.
+                    cursor = eventsResponse.cursor;
                 } else {
                     hasMore = false;
                 }

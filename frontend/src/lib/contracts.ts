@@ -391,6 +391,167 @@ export async function issueCredentialOnStellar(
     };
 }
 
+/** Mirrors MAX_BATCH_SIZE in contracts/src/lib.rs — keep these in sync. */
+export const CONTRACT_MAX_BATCH_SIZE = 20;
+
+/** Mirrors ContractError::CredentialAlreadyExists = 3 in contracts/src/lib.rs. */
+const CONTRACT_ERROR_CREDENTIAL_ALREADY_EXISTS = 3;
+
+export interface BatchCredentialInputItem {
+    studentAddress: string;
+    credentialHash: string; // 64-char sha256 hex
+    ipfsUri: string;
+}
+
+export interface BatchIssueRowResult {
+    index: number;
+    success: boolean;
+    tokenId: string | null; // null when success === false
+    errorCode: number | null; // null when success === true
+}
+
+export interface BatchIssueOutcome {
+    transactionHash: string;
+    results: BatchIssueRowResult[];
+}
+
+export function describeBatchRowError(errorCode: number | null): string {
+    if (errorCode === CONTRACT_ERROR_CREDENTIAL_ALREADY_EXISTS) {
+        return 'A credential with this exact hash already exists (duplicate row, or already issued previously).';
+    }
+    return errorCode == null ? 'Unknown error' : `Contract error ${errorCode}`;
+}
+
+/**
+ * Builds an ScVal for a Soroban `#[contracttype]` struct. Field keys must be
+ * ScVal symbols (not strings), sorted ascending by field name — the
+ * generated Rust decoder does a binary_search_by_key over field-name symbols
+ * (soroban-sdk-macros' derive_struct), so an unsorted or string-keyed map
+ * traps on the host. The generic nativeToScVal(plainObject) must NOT be used
+ * for this — it defaults object keys to ScVal.scvString, not scvSymbol.
+ */
+function structScVal(fields: Record<string, xdr.ScVal>): xdr.ScVal {
+    const sortedKeys = Object.keys(fields).sort();
+    return xdr.ScVal.scvMap(
+        sortedKeys.map(
+            (key) =>
+                new xdr.ScMapEntry({
+                    key: nativeToScVal(key, { type: 'symbol' }),
+                    val: fields[key],
+                }),
+        ),
+    );
+}
+
+export function batchCredentialInputToScVal(item: BatchCredentialInputItem): xdr.ScVal {
+    return structScVal({
+        credential_hash: credentialHashHexToScVal(item.credentialHash),
+        ipfs_uri: nativeToScVal(item.ipfsUri, { type: 'string' }),
+        student: new Address(item.studentAddress).toScVal(),
+    });
+}
+
+function normalizeBatchIssueRow(row: unknown, fallbackIndex: number): BatchIssueRowResult {
+    const record = (row ?? {}) as Record<string, unknown>;
+    const success = record.success === true;
+    const rawIndex = record.index;
+    const index =
+        typeof rawIndex === 'bigint'
+            ? Number(rawIndex)
+            : typeof rawIndex === 'number'
+              ? rawIndex
+              : fallbackIndex;
+
+    return {
+        index,
+        success,
+        tokenId: success ? normalizeTokenId(record.token_id) : null,
+        errorCode: success ? null : Number(record.error_code ?? -1),
+    };
+}
+
+/**
+ * Issues up to CONTRACT_MAX_BATCH_SIZE credentials from a single issuer in
+ * one call/signature. A bad row (e.g. a duplicate hash) does not fail the
+ * whole call — it comes back as a failed BatchIssueRowResult alongside the
+ * successful ones, matching batch_issue_credential's partial-failure
+ * semantics on-chain. Callers with more rows than the max must split into
+ * multiple sequential calls (see chunkRows in batchCredentialImport.ts).
+ */
+export async function batchIssueCredentialOnStellar(
+    items: BatchCredentialInputItem[],
+    issuerAddress: string,
+): Promise<BatchIssueOutcome> {
+    if (items.length === 0) {
+        throw new Error('Cannot issue an empty batch.');
+    }
+    if (items.length > CONTRACT_MAX_BATCH_SIZE) {
+        throw new Error(
+            `Batch of ${items.length} exceeds the contract's max batch size of ${CONTRACT_MAX_BATCH_SIZE}.`,
+        );
+    }
+
+    const e2eState = getE2eState();
+    if (e2eState?.enabled) {
+        const authorized = Boolean(
+            (e2eState.contractOwner &&
+                issuerAddress.toLowerCase() === e2eState.contractOwner.toLowerCase()) ||
+                e2eState.authorizedIssuers?.some(
+                    (value) => value.toLowerCase() === issuerAddress.toLowerCase(),
+                ),
+        );
+        if (!authorized) {
+            throw new Error('Your wallet is not authorized to issue credentials.');
+        }
+
+        const startId = e2eState.nextTokenId ?? 1;
+        const results: BatchIssueRowResult[] = items.map((_, index) => ({
+            index,
+            success: true,
+            tokenId: String(startId + index),
+            errorCode: null,
+        }));
+        updateE2eState((state) => {
+            state.nextTokenId = startId + items.length;
+        });
+        return { transactionHash: `e2e-batch-tx-${startId}`, results };
+    }
+
+    debugLog('Issuing credential batch on Stellar.');
+
+    const authorized = await isAuthorizedIssuer(issuerAddress, issuerAddress);
+    if (!authorized) {
+        throw new Error(
+            `Your wallet ("${issuerAddress}") is not authorized to issue credentials.\n\n` +
+                `The contract admin must authorize your wallet first via:\n` +
+                `Admin Dashboard -> "Authorize Wallet" -> enter your Stellar address.`,
+        );
+    }
+
+    const contractId = getContractAddress('CREDENTIAL_NFT');
+    const itemsScVal = xdr.ScVal.scvVec(items.map(batchCredentialInputToScVal));
+    const args = [new Address(issuerAddress).toScVal(), itemsScVal];
+
+    const result = await invokeContractMethod(
+        contractId,
+        'batch_issue_credential',
+        args,
+        issuerAddress,
+    );
+
+    const rawRows = Array.isArray(result.returnValue) ? result.returnValue : [];
+    const results = rawRows.map((row, index) => normalizeBatchIssueRow(row, index));
+
+    // eslint-disable-next-line no-console
+    console.log(
+        `✅ Credential batch issued on Stellar Network. ${results.filter((r) => r.success).length}/${results.length} succeeded.`,
+    );
+    // eslint-disable-next-line no-console
+    console.log('✅ Transaction:', result.transactionHash);
+
+    return { transactionHash: result.transactionHash, results };
+}
+
 export async function revokeCredentialOnStellar(
     tokenId: string,
     issuerAddress: string,

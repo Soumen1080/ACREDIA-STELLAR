@@ -27,7 +27,16 @@ const allowedFileTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/p
 const maxFileSize = 10 * 1024 * 1024;
 const gradePattern = /^[A-Za-z0-9+\-. ]+$/;
 
-function parseIssueDate(value: string): Date | null {
+export interface CommonCredentialFields {
+    studentName: string;
+    studentWallet: string;
+    credentialType: string;
+    degree: string;
+    gpa?: string;
+    issueDate: string;
+}
+
+export function parseIssueDate(value: string): Date | null {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
     if (!match) {
         return null;
@@ -45,8 +54,14 @@ function parseIssueDate(value: string): Date | null {
     return date;
 }
 
-export function validateCredentialDraft(
-    input: CredentialValidationInput,
+/**
+ * Field checks shared by the single-issuance form and the CSV batch
+ * importer (student/wallet/type/degree/date/gpa). File and subjects checks
+ * are single-issuance-only (batch import is metadata-only, no per-row file
+ * upload) and stay in validateCredentialDraft below.
+ */
+export function validateCommonCredentialFields(
+    input: CommonCredentialFields,
     isWalletAddressValid = defaultIsValidAddress,
 ): string[] {
     const errors: string[] = [];
@@ -80,6 +95,15 @@ export function validateCredentialDraft(
             errors.push('Please enter a valid GPA');
         }
     }
+
+    return errors;
+}
+
+export function validateCredentialDraft(
+    input: CredentialValidationInput,
+    isWalletAddressValid = defaultIsValidAddress,
+): string[] {
+    const errors: string[] = [...validateCommonCredentialFields(input, isWalletAddressValid)];
 
     if (!input.file) {
         errors.push('Please select a file to upload');

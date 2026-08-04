@@ -1,6 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env, String,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
+    String, Vec,
 };
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,29 @@ const PERSISTENT_THRESHOLD: u32 = 3_110_400; // ~6 months  (re-extend trigger)
 const INSTANCE_BUMP_AMOUNT: u32 = 6_312_000;
 const INSTANCE_THRESHOLD: u32 = 3_110_400;
 
+// Maximum number of credentials accepted per `batch_issue_credential` call.
+// Each successful row writes two persistent entries (Credential + HashIndex),
+// on top of the shared NextTokenId/TotalCredentials writes for the whole
+// call. This isn't just a guess: the soroban-env-host test harness
+// (`cargo test`) actually simulates real network resource limits, and 25
+// items measurably exceeds them — "write ledger entries: 53 > 50, total
+// footprint ledger entries: 109 > 100" (see
+// `test_batch_issue_at_max_size_boundary_succeeds`, which pins this value by
+// asserting a full batch at MAX_BATCH_SIZE succeeds under simulation). 20
+// keeps a comfortable margin under both ceilings while still cutting
+// signature/latency overhead by 20x versus one-by-one issuance. Callers with
+// larger CSVs are expected to split into multiple `batch_issue_credential`
+// calls (chunks). Revisit this number if the persistent-entry TTL-bump
+// overhead changes, or against measured mainnet resource costs (see
+// MAINNET_CHECKLIST.md).
+const MAX_BATCH_SIZE: u32 = 20;
+
+// Issuer profile size caps (see IssuerProfile) — kept small and fixed so an
+// issuer's identity binding stays a cheap, bounded-size persistent entry
+// rather than an open-ended storage/TTL liability.
+const MAX_ISSUER_NAME_LEN: u32 = 64;
+const MAX_ISSUER_PROFILE_URI_LEN: u32 = 256;
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u32)]
@@ -36,6 +60,9 @@ pub enum ContractError {
     SameOwner = 8,
     NoPendingOwner = 9,
     ContractPaused = 10,
+    BatchTooLarge = 11,
+    EmptyBatch = 12,
+    ProfileTooLarge = 13,
 }
 
 #[contracttype]
@@ -50,6 +77,7 @@ pub enum DataKey {
     TotalCredentials,
     StorageVersion,
     Paused,
+    IssuerProfile(Address),
 }
 
 #[contracttype]
@@ -62,6 +90,47 @@ pub struct Credential {
     pub ipfs_hash: String,
     pub issued_at: u64,
     pub revoked: bool,
+}
+
+/// A single row of a `batch_issue_credential` call. The issuer is shared
+/// across the whole batch (see `batch_issue_credential`), so it is not
+/// repeated per row.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BatchCredentialInput {
+    pub student: Address,
+    pub credential_hash: BytesN<32>,
+    pub ipfs_uri: String,
+}
+
+/// Per-row outcome of a `batch_issue_credential` call. Plain primitives are
+/// used instead of `Option<ContractError>` so the shape stays simple and
+/// unambiguous to decode off-chain: `token_id` is `0` (never a real token id,
+/// which starts at 1) when `success` is `false`, and `error_code` mirrors a
+/// `ContractError as u32` value when `success` is `false`, else `0`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BatchIssueResult {
+    pub index: u32,
+    pub success: bool,
+    pub token_id: u64,
+    pub error_code: u32,
+}
+
+/// Minimal on-chain binding from an authorized issuer's address to a
+/// human-readable identity. `name` is a short display handle read directly
+/// from chain state (no off-chain fetch needed for a quick trust check);
+/// `profile_uri` optionally points to a richer, off-chain-signed issuer
+/// profile document (e.g. an `ipfs://` URI) for deeper verification —
+/// mirrors how `Credential.ipfs_hash` anchors a credential's own metadata.
+/// Both fields are length-capped (see MAX_ISSUER_NAME_LEN /
+/// MAX_ISSUER_PROFILE_URI_LEN) to keep per-issuer storage/TTL cost small.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IssuerProfile {
+    pub name: String,
+    pub profile_uri: String,
+    pub updated_at: u64,
 }
 
 #[contract]
@@ -111,6 +180,15 @@ fn extend_credential_ttl(env: &Env, token_id: u64, credential_hash: &BytesN<32>)
 fn extend_total_credentials_ttl(env: &Env) {
     env.storage().persistent().extend_ttl(
         &DataKey::TotalCredentials,
+        PERSISTENT_THRESHOLD,
+        PERSISTENT_BUMP_AMOUNT,
+    );
+}
+
+/// Extend the TTL of a single issuer's profile entry.
+fn extend_issuer_profile_ttl(env: &Env, issuer: &Address) {
+    env.storage().persistent().extend_ttl(
+        &DataKey::IssuerProfile(issuer.clone()),
         PERSISTENT_THRESHOLD,
         PERSISTENT_BUMP_AMOUNT,
     );
@@ -285,6 +363,66 @@ impl AcrediaCredential {
         check_and_extend_authorization(&env, &issuer)
     }
 
+    /// Publish or update the calling issuer's minimal on-chain identity
+    /// binding. Self-service by design (the issuer signs, not the owner) —
+    /// authorization (who *can* issue) and profile (how they *identify*) are
+    /// deliberately separate concerns. Requires the caller to be currently
+    /// authorized, so profile storage can't be spammed by arbitrary
+    /// addresses. Revoking an issuer's authorization does not clear their
+    /// profile (see revoke_issuer) — past credentials should still resolve
+    /// to the identity that issued them — it just blocks further updates
+    /// until re-authorized.
+    pub fn set_issuer_profile(
+        env: Env,
+        issuer: Address,
+        name: String,
+        profile_uri: String,
+    ) -> Result<(), ContractError> {
+        issuer.require_auth();
+
+        if !check_and_extend_authorization(&env, &issuer) {
+            return Err(ContractError::IssuerNotAuthorized);
+        }
+
+        if name.len() > MAX_ISSUER_NAME_LEN || profile_uri.len() > MAX_ISSUER_PROFILE_URI_LEN {
+            return Err(ContractError::ProfileTooLarge);
+        }
+
+        let updated_at = env.ledger().timestamp();
+        let profile = IssuerProfile {
+            name: name.clone(),
+            profile_uri: profile_uri.clone(),
+            updated_at,
+        };
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::IssuerProfile(issuer.clone()), &profile);
+        extend_issuer_profile_ttl(&env, &issuer);
+        extend_instance_ttl(&env);
+
+        env.events().publish(
+            (symbol_short!("iss_prof"), issuer),
+            (name, profile_uri, updated_at),
+        );
+
+        Ok(())
+    }
+
+    /// Resolve an issuer address to its on-chain identity binding, if any
+    /// has been published. Returns `None` for an issuer that never called
+    /// `set_issuer_profile` — this is a distinct, weaker state than "not
+    /// authorized" (an authorized issuer may simply not have a profile yet).
+    pub fn get_issuer_profile(env: Env, issuer: Address) -> Option<IssuerProfile> {
+        extend_instance_ttl(&env);
+        let profile: IssuerProfile = env
+            .storage()
+            .persistent()
+            .get(&DataKey::IssuerProfile(issuer.clone()))?;
+        extend_issuer_profile_ttl(&env, &issuer);
+        Some(profile)
+    }
+
     pub fn issue_credential(
         env: Env,
         student: Address,
@@ -360,6 +498,143 @@ impl AcrediaCredential {
         );
 
         Ok(token_id)
+    }
+
+    /// Issue up to `MAX_BATCH_SIZE` credentials from a single issuer in one
+    /// call/signature. Unlike `issue_credential`, a bad row (e.g. a duplicate
+    /// hash) does not fail the whole call: it is recorded as a failed
+    /// `BatchIssueResult` and the remaining rows are still attempted, so
+    /// callers get clear per-row success/failure instead of an all-or-nothing
+    /// transaction. Only whole-batch problems (unauthenticated/unauthorized
+    /// issuer, paused contract, empty batch, batch too large) fail the call
+    /// itself via `Result::Err`.
+    pub fn batch_issue_credential(
+        env: Env,
+        issuer: Address,
+        credentials: Vec<BatchCredentialInput>,
+    ) -> Result<Vec<BatchIssueResult>, ContractError> {
+        issuer.require_auth();
+
+        if contract_is_paused(&env) {
+            return Err(ContractError::ContractPaused);
+        }
+
+        if !check_and_extend_authorization(&env, &issuer) {
+            return Err(ContractError::IssuerNotAuthorized);
+        }
+
+        if credentials.is_empty() {
+            return Err(ContractError::EmptyBatch);
+        }
+
+        if credentials.len() > MAX_BATCH_SIZE {
+            return Err(ContractError::BatchTooLarge);
+        }
+
+        let mut results: Vec<BatchIssueResult> = Vec::new(&env);
+        // Hashes issued earlier in this same batch — duplicates against these
+        // wouldn't yet be visible via `storage().persistent().has(...)`.
+        let mut seen_hashes: Vec<BytesN<32>> = Vec::new(&env);
+
+        let mut next_token_id: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::NextTokenId)
+            .unwrap_or(1u64);
+        let mut issued_count: u64 = 0;
+
+        for (i, input) in credentials.iter().enumerate() {
+            let index = i as u32;
+
+            let mut duplicate = env
+                .storage()
+                .persistent()
+                .has(&DataKey::HashIndex(input.credential_hash.clone()));
+            if !duplicate {
+                for seen in seen_hashes.iter() {
+                    if seen == input.credential_hash {
+                        duplicate = true;
+                        break;
+                    }
+                }
+            }
+
+            if duplicate {
+                results.push_back(BatchIssueResult {
+                    index,
+                    success: false,
+                    token_id: 0,
+                    error_code: ContractError::CredentialAlreadyExists as u32,
+                });
+                continue;
+            }
+
+            let token_id = next_token_id;
+            let credential = Credential {
+                token_id,
+                student: input.student.clone(),
+                issuer: issuer.clone(),
+                credential_hash: input.credential_hash.clone(),
+                ipfs_hash: input.ipfs_uri.clone(),
+                issued_at: env.ledger().timestamp(),
+                revoked: false,
+            };
+
+            env.storage()
+                .persistent()
+                .set(&DataKey::Credential(token_id), &credential);
+            env.storage().persistent().set(
+                &DataKey::HashIndex(input.credential_hash.clone()),
+                &token_id,
+            );
+            extend_credential_ttl(&env, token_id, &input.credential_hash);
+
+            seen_hashes.push_back(input.credential_hash.clone());
+            next_token_id += 1;
+            issued_count += 1;
+
+            env.events().publish(
+                (symbol_short!("cred_iss"), token_id),
+                (
+                    input.student.clone(),
+                    issuer.clone(),
+                    input.credential_hash.clone(),
+                    input.ipfs_uri.clone(),
+                ),
+            );
+
+            results.push_back(BatchIssueResult {
+                index,
+                success: true,
+                token_id,
+                error_code: 0,
+            });
+        }
+
+        if issued_count > 0 {
+            env.storage()
+                .instance()
+                .set(&DataKey::NextTokenId, &next_token_id);
+
+            let current: u64 = env
+                .storage()
+                .persistent()
+                .get(&DataKey::TotalCredentials)
+                .unwrap_or(0u64);
+            env.storage()
+                .persistent()
+                .set(&DataKey::TotalCredentials, &(current + issued_count));
+            extend_total_credentials_ttl(&env);
+        }
+
+        extend_instance_ttl(&env);
+
+        env.events().publish(
+            (symbol_short!("batch_is"), issuer),
+            (credentials.len(), issued_count as u32),
+        );
+
+        Ok(results)
     }
 
     pub fn revoke_credential(
@@ -579,6 +854,14 @@ mod tests {
         BytesN::from_array(env, &[seed; 32])
     }
 
+    fn dummy_batch_input(env: &Env, seed: u8, student: &Address) -> BatchCredentialInput {
+        BatchCredentialInput {
+            student: student.clone(),
+            credential_hash: dummy_hash(env, seed),
+            ipfs_uri: String::from_str(env, "ipfs://batch"),
+        }
+    }
+
     fn last_event_topics(env: &Env) -> soroban_sdk::Vec<Val> {
         let events = env.events().all();
         let event = events.events().last().unwrap();
@@ -701,6 +984,261 @@ mod tests {
             );
             assert_eq!(result, Err(ContractError::IssuerNotAuthorized));
         });
+    }
+
+    // Batch issuance
+
+    #[test]
+    fn test_batch_issue_success() {
+        let (env, contract, _, issuer, student) = setup();
+        env.as_contract(&contract, || {
+            let items = soroban_sdk::vec![
+                &env,
+                dummy_batch_input(&env, 40, &student),
+                dummy_batch_input(&env, 41, &student),
+                dummy_batch_input(&env, 42, &student),
+            ];
+            let results =
+                AcrediaCredential::batch_issue_credential(env.clone(), issuer, items).unwrap();
+
+            assert_eq!(results.len(), 3);
+            for i in 0..3u32 {
+                let r = results.get(i).unwrap();
+                assert!(r.success);
+                assert_eq!(r.token_id, (i as u64) + 1);
+                assert_eq!(r.error_code, 0);
+            }
+            assert_eq!(AcrediaCredential::total_credentials(env.clone()), 3);
+        });
+    }
+
+    #[test]
+    fn test_batch_issue_in_batch_duplicate_rejected_others_succeed() {
+        let (env, contract, _, issuer, student) = setup();
+        env.as_contract(&contract, || {
+            let hash_a = dummy_hash(&env, 50);
+            let hash_b = dummy_hash(&env, 51);
+            let items = soroban_sdk::vec![
+                &env,
+                BatchCredentialInput {
+                    student: student.clone(),
+                    credential_hash: hash_a.clone(),
+                    ipfs_uri: String::from_str(&env, "ipfs://a"),
+                },
+                BatchCredentialInput {
+                    student: student.clone(),
+                    credential_hash: hash_a,
+                    ipfs_uri: String::from_str(&env, "ipfs://a-dup"),
+                },
+                BatchCredentialInput {
+                    student,
+                    credential_hash: hash_b,
+                    ipfs_uri: String::from_str(&env, "ipfs://b"),
+                },
+            ];
+
+            let results =
+                AcrediaCredential::batch_issue_credential(env.clone(), issuer, items).unwrap();
+            assert_eq!(results.len(), 3);
+
+            let r0 = results.get(0).unwrap();
+            let r1 = results.get(1).unwrap();
+            let r2 = results.get(2).unwrap();
+
+            assert!(r0.success);
+            assert_eq!(r0.token_id, 1);
+
+            assert!(!r1.success);
+            assert_eq!(r1.token_id, 0);
+            assert_eq!(r1.error_code, ContractError::CredentialAlreadyExists as u32);
+
+            // The failed row must not have consumed a token id.
+            assert!(r2.success);
+            assert_eq!(r2.token_id, 2);
+
+            assert_eq!(AcrediaCredential::total_credentials(env.clone()), 2);
+        });
+    }
+
+    #[test]
+    fn test_batch_issue_duplicate_against_existing_storage() {
+        let (env, contract, _, issuer, student) = setup();
+        let hash_a = dummy_hash(&env, 60);
+        env.as_contract(&contract, || {
+            AcrediaCredential::issue_credential(
+                env.clone(),
+                student.clone(),
+                issuer.clone(),
+                hash_a.clone(),
+                String::from_str(&env, "ipfs://pre-existing"),
+            )
+            .unwrap();
+        });
+
+        env.as_contract(&contract, || {
+            let items = soroban_sdk::vec![
+                &env,
+                BatchCredentialInput {
+                    student: student.clone(),
+                    credential_hash: hash_a,
+                    ipfs_uri: String::from_str(&env, "ipfs://dup"),
+                },
+                BatchCredentialInput {
+                    student,
+                    credential_hash: dummy_hash(&env, 61),
+                    ipfs_uri: String::from_str(&env, "ipfs://new"),
+                },
+            ];
+            let results =
+                AcrediaCredential::batch_issue_credential(env.clone(), issuer, items).unwrap();
+
+            assert!(!results.get(0).unwrap().success);
+            let r1 = results.get(1).unwrap();
+            assert!(r1.success);
+            assert_eq!(r1.token_id, 2);
+        });
+    }
+
+    #[test]
+    fn test_batch_issue_exceeds_max_size_rejected() {
+        let (env, contract, _, issuer, student) = setup();
+        env.as_contract(&contract, || {
+            let mut items: Vec<BatchCredentialInput> = Vec::new(&env);
+            for seed in 0..(MAX_BATCH_SIZE + 1) {
+                items.push_back(dummy_batch_input(&env, seed as u8, &student));
+            }
+            let result = AcrediaCredential::batch_issue_credential(env.clone(), issuer, items);
+            assert_eq!(result, Err(ContractError::BatchTooLarge));
+            assert_eq!(AcrediaCredential::total_credentials(env.clone()), 0);
+        });
+    }
+
+    #[test]
+    fn test_batch_issue_at_max_size_boundary_succeeds() {
+        let (env, contract, _, issuer, student) = setup();
+        env.as_contract(&contract, || {
+            let mut items: Vec<BatchCredentialInput> = Vec::new(&env);
+            for seed in 0..MAX_BATCH_SIZE {
+                items.push_back(dummy_batch_input(&env, seed as u8, &student));
+            }
+            let results =
+                AcrediaCredential::batch_issue_credential(env.clone(), issuer, items).unwrap();
+            assert_eq!(results.len(), MAX_BATCH_SIZE);
+            assert_eq!(
+                AcrediaCredential::total_credentials(env.clone()),
+                MAX_BATCH_SIZE as u64
+            );
+        });
+    }
+
+    #[test]
+    fn test_batch_issue_empty_rejected() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            let items: Vec<BatchCredentialInput> = Vec::new(&env);
+            let result = AcrediaCredential::batch_issue_credential(env.clone(), issuer, items);
+            assert_eq!(result, Err(ContractError::EmptyBatch));
+        });
+    }
+
+    #[test]
+    fn test_batch_issue_pause_blocks() {
+        let (env, contract, _, issuer, student) = setup();
+        env.as_contract(&contract, || {
+            AcrediaCredential::pause(env.clone()).unwrap();
+            let items = soroban_sdk::vec![&env, dummy_batch_input(&env, 70, &student)];
+            let result = AcrediaCredential::batch_issue_credential(env.clone(), issuer, items);
+            assert_eq!(result, Err(ContractError::ContractPaused));
+        });
+    }
+
+    #[test]
+    fn test_batch_issue_unauthorized_issuer_rejected() {
+        let (env, contract, _, _, student) = setup();
+        let rogue = Address::generate(&env);
+        env.as_contract(&contract, || {
+            let items = soroban_sdk::vec![&env, dummy_batch_input(&env, 71, &student)];
+            let result = AcrediaCredential::batch_issue_credential(env.clone(), rogue, items);
+            assert_eq!(result, Err(ContractError::IssuerNotAuthorized));
+        });
+    }
+
+    #[test]
+    fn test_batch_issue_requires_issuer_auth() {
+        let (env, contract, _, issuer, student) = setup();
+        let client = AcrediaCredentialClient::new(&env, &contract);
+        let items = soroban_sdk::vec![&env, dummy_batch_input(&env, 72, &student)];
+
+        env.set_auths(&[]);
+        assert!(client.try_batch_issue_credential(&issuer, &items).is_err());
+
+        env.mock_all_auths();
+        assert_eq!(client.total_credentials(), 0);
+    }
+
+    #[test]
+    fn test_batch_issue_token_ids_interleave_with_single_issue() {
+        let (env, contract, _, issuer, student) = setup();
+
+        // Each call below is its own env.as_contract frame — matching the
+        // setup() comment's rule that mock_all_auths() errors on a second
+        // require_auth() for the same address within one synthetic frame.
+        let id1 = env.as_contract(&contract, || {
+            AcrediaCredential::issue_credential(
+                env.clone(),
+                student.clone(),
+                issuer.clone(),
+                dummy_hash(&env, 80),
+                String::from_str(&env, "ipfs://1"),
+            )
+            .unwrap()
+        });
+        assert_eq!(id1, 1);
+
+        let results = env.as_contract(&contract, || {
+            let items = soroban_sdk::vec![
+                &env,
+                dummy_batch_input(&env, 81, &student),
+                dummy_batch_input(&env, 82, &student),
+            ];
+            AcrediaCredential::batch_issue_credential(env.clone(), issuer.clone(), items).unwrap()
+        });
+        assert_eq!(results.get(0).unwrap().token_id, 2);
+        assert_eq!(results.get(1).unwrap().token_id, 3);
+
+        let id4 = env.as_contract(&contract, || {
+            AcrediaCredential::issue_credential(
+                env.clone(),
+                student,
+                issuer,
+                dummy_hash(&env, 83),
+                String::from_str(&env, "ipfs://4"),
+            )
+            .unwrap()
+        });
+        assert_eq!(id4, 4);
+    }
+
+    #[test]
+    fn test_batch_issue_emits_batch_summary_event() {
+        let (env, contract, _, issuer, student) = setup();
+        env.as_contract(&contract, || {
+            let items = soroban_sdk::vec![
+                &env,
+                dummy_batch_input(&env, 90, &student),
+                dummy_batch_input(&env, 91, &student),
+            ];
+            AcrediaCredential::batch_issue_credential(env.clone(), issuer.clone(), items).unwrap();
+        });
+
+        assert_eq!(
+            last_event_topics(&env),
+            vec![
+                &env,
+                symbol_short!("batch_is").into_val(&env),
+                issuer.into_val(&env),
+            ]
+        );
     }
 
     // Revocation
@@ -911,6 +1449,190 @@ mod tests {
             last_event_topics(&env),
             vec![&env, symbol_short!("iss_rev").into_val(&env)]
         );
+    }
+
+    // Issuer profile
+
+    /// Builds a length-`len` ASCII string without needing `alloc`/`std` —
+    /// unlike proptest_invariants below, this module isn't linked against
+    /// them, so no `.repeat()`/`format!`.
+    fn dummy_long_str(env: &Env, len: usize) -> String {
+        const BUF: [u8; 300] = [b'a'; 300];
+        String::from_str(env, core::str::from_utf8(&BUF[..len]).unwrap())
+    }
+
+    #[test]
+    fn test_set_and_get_issuer_profile() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            let name = String::from_str(&env, "Acredia University");
+            let uri = String::from_str(&env, "ipfs://bafy-profile");
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                name.clone(),
+                uri.clone(),
+            )
+            .unwrap();
+
+            let profile = AcrediaCredential::get_issuer_profile(env.clone(), issuer).unwrap();
+            assert_eq!(profile.name, name);
+            assert_eq!(profile.profile_uri, uri);
+            assert_eq!(profile.updated_at, env.ledger().timestamp());
+        });
+    }
+
+    #[test]
+    fn test_get_issuer_profile_none_when_unset() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            assert!(AcrediaCredential::get_issuer_profile(env.clone(), issuer).is_none());
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_emits_event() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                String::from_str(&env, "Acredia University"),
+                String::from_str(&env, "ipfs://bafy-profile"),
+            )
+            .unwrap();
+        });
+
+        assert_eq!(
+            last_event_topics(&env),
+            vec![
+                &env,
+                symbol_short!("iss_prof").into_val(&env),
+                issuer.into_val(&env),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_set_issuer_profile_update_overwrites_previous() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                String::from_str(&env, "Old Name"),
+                String::from_str(&env, "ipfs://old"),
+            )
+            .unwrap();
+        });
+        env.as_contract(&contract, || {
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                String::from_str(&env, "New Name"),
+                String::from_str(&env, "ipfs://new"),
+            )
+            .unwrap();
+        });
+
+        env.as_contract(&contract, || {
+            let profile = AcrediaCredential::get_issuer_profile(env.clone(), issuer).unwrap();
+            assert_eq!(profile.name, String::from_str(&env, "New Name"));
+            assert_eq!(profile.profile_uri, String::from_str(&env, "ipfs://new"));
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_requires_authorized_issuer() {
+        let (env, contract, _, _, _) = setup();
+        let rogue = Address::generate(&env);
+        env.as_contract(&contract, || {
+            let result = AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                rogue,
+                String::from_str(&env, "Fake U"),
+                String::from_str(&env, ""),
+            );
+            assert_eq!(result, Err(ContractError::IssuerNotAuthorized));
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_rejects_oversized_name() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            let long_name = dummy_long_str(&env, (MAX_ISSUER_NAME_LEN + 1) as usize);
+            let result = AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer,
+                long_name,
+                String::from_str(&env, ""),
+            );
+            assert_eq!(result, Err(ContractError::ProfileTooLarge));
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_rejects_oversized_uri() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            let long_uri = dummy_long_str(&env, (MAX_ISSUER_PROFILE_URI_LEN + 1) as usize);
+            let result = AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer,
+                String::from_str(&env, "Fine"),
+                long_uri,
+            );
+            assert_eq!(result, Err(ContractError::ProfileTooLarge));
+        });
+    }
+
+    #[test]
+    fn test_set_issuer_profile_requires_issuer_auth() {
+        let (env, contract, _, issuer, _) = setup();
+        let client = AcrediaCredentialClient::new(&env, &contract);
+        let name = String::from_str(&env, "Acredia University");
+        let uri = String::from_str(&env, "ipfs://bafy-profile");
+
+        env.set_auths(&[]);
+        assert!(client.try_set_issuer_profile(&issuer, &name, &uri).is_err());
+
+        env.mock_all_auths();
+        assert!(client.get_issuer_profile(&issuer).is_none());
+    }
+
+    #[test]
+    fn test_issuer_profile_survives_revocation_but_blocks_further_updates() {
+        let (env, contract, _, issuer, _) = setup();
+        env.as_contract(&contract, || {
+            AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer.clone(),
+                String::from_str(&env, "Acredia University"),
+                String::from_str(&env, "ipfs://bafy-profile"),
+            )
+            .unwrap();
+        });
+
+        env.as_contract(&contract, || {
+            AcrediaCredential::revoke_issuer(env.clone(), issuer.clone());
+        });
+
+        env.as_contract(&contract, || {
+            // Past identity binding is still resolvable after revocation...
+            let profile =
+                AcrediaCredential::get_issuer_profile(env.clone(), issuer.clone()).unwrap();
+            assert_eq!(profile.name, String::from_str(&env, "Acredia University"));
+
+            // ...but the now-unauthorized issuer can no longer update it.
+            let result = AcrediaCredential::set_issuer_profile(
+                env.clone(),
+                issuer,
+                String::from_str(&env, "New Name"),
+                String::from_str(&env, "ipfs://new"),
+            );
+            assert_eq!(result, Err(ContractError::IssuerNotAuthorized));
+        });
     }
 
     // Totals

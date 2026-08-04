@@ -2,28 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const sqlDir = join(process.cwd(), 'sql');
-const migrationsDir = join(process.cwd(), 'supabase', 'migrations');
-
-// The consolidated schema now lives as a versioned Supabase migration; the
-// legacy FULL_SETUP.sql / database_schema.sql names map onto it so these
-// schema-contract assertions keep protecting the same DDL.
-const LEGACY_SCHEMA_FILES: Record<string, string> = {
-    'FULL_SETUP.sql': '20260730000000_initial_schema.sql',
-    'database_schema.sql': '20260730000000_initial_schema.sql',
-};
-
-function readSql(name: string) {
-    const mapped = LEGACY_SCHEMA_FILES[name];
-    if (mapped) {
-        return readFileSync(join(migrationsDir, mapped), 'utf8');
-    }
-    return readFileSync(join(sqlDir, name), 'utf8');
+function readSql(...segments: string[]) {
+    return readFileSync(join(process.cwd(), ...segments), 'utf8');
 }
 
-// The schema is now consolidated into a single idempotent setup file.
-const setup = readSql('FULL_SETUP.sql');
-const baseSchema = readSql('database_schema.sql');
+// The schema is consolidated into a single idempotent Supabase migration
+// file; there is no separate database_schema.sql anymore (it was folded in).
+const setup = readSql('supabase', 'migrations', '20260730000000_initial_schema.sql');
 
 describe('database migration policy model', () => {
     it('keeps the consolidated schema free of permissive public policies', () => {
@@ -69,21 +54,17 @@ describe('database migration policy model', () => {
         expect(setup).toContain('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
     });
 
-    it('stores credential hash schema metadata in base and full schemas', () => {
-        for (const sql of [baseSchema, setup]) {
-            expect(sql).toContain('metadata_schema_version INTEGER NOT NULL DEFAULT 1');
-            expect(sql).toContain(
-                "hash_algorithm          TEXT NOT NULL DEFAULT 'sha256:canonical-json:v1'",
-            );
-        }
+    it('stores credential hash schema metadata', () => {
+        expect(setup).toContain('metadata_schema_version INTEGER NOT NULL DEFAULT 1');
+        expect(setup).toContain(
+            "hash_algorithm          TEXT NOT NULL DEFAULT 'sha256:canonical-json:v1'",
+        );
     });
 
     it('indexes privacy-safe verification audit aggregates', () => {
-        for (const sql of [baseSchema, setup]) {
-            expect(sql).toContain('idx_verification_logs_created_at');
-            expect(sql).toContain('idx_verification_logs_result_type');
-            expect(sql).toContain("verification_result->>'result_type'");
-        }
+        expect(setup).toContain('idx_verification_logs_created_at');
+        expect(setup).toContain('idx_verification_logs_result_type');
+        expect(setup).toContain("verification_result->>'result_type'");
     });
 
     it('stamps legacy credential rows before enforcing hash metadata requirements', () => {
