@@ -140,6 +140,28 @@ export async function requireAdminRequest(
     };
 }
 
+/**
+ * Convenience wrapper around {@link requireAuthenticatedRequest} for routes that
+ * only need "is this a signed-in user, and who are they?".
+ *
+ * Returns `null` instead of a failure object so callers can guard with a simple
+ * falsy check and reply `401` themselves.
+ */
+export async function verifySession(
+    request: NextRequest,
+): Promise<{ user: User; userId: string; accessToken: string } | null> {
+    const authCheck = await requireAuthenticatedRequest(request);
+    if (!authCheck.ok) {
+        return null;
+    }
+
+    return {
+        user: authCheck.user,
+        userId: authCheck.userId,
+        accessToken: authCheck.accessToken,
+    };
+}
+
 export async function requireAuthenticatedRequest(
     request: NextRequest,
 ): Promise<AuthenticatedRequest | AuthFailure> {
@@ -184,7 +206,7 @@ export async function requireAuthenticatedRequest(
  *
  * Authenticates the caller, then resolves their role through the shared
  * {@link resolveUserRole} resolver so this guard can never drift from the role
- * priority documented in `AUTH_FLOW.md`. Anything other than `'institution'`
+ * priority documented in `docs/auth-flow.md`. Anything other than `'institution'`
  * — anonymous, student, admin, or unprovisioned — is rejected.
  *
  * Prefers the service-role client so the check does not depend on RLS; falls

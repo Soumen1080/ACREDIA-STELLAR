@@ -422,7 +422,7 @@ For production deployments:
 
 > **Note:** this on-chain TTL keeper is a separate concern from the
 > off-chain IPFS pin-redundancy keeper (`frontend/worker/pinKeeper.ts`,
-> documented in [`frontend/PIN_REDUNDANCY.md`](../frontend/PIN_REDUNDANCY.md)).
+> documented in [`docs/ops/pin-redundancy.md`](../docs/ops/pin-redundancy.md)).
 > The TTL keeper above keeps the on-chain hash/URI record from being
 > archived; the pin keeper keeps the actual document the URI points to
 > retrievable on IPFS. A production deployment needs both.

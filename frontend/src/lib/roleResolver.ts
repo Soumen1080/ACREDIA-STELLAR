@@ -14,7 +14,7 @@
  *    `normalizePublicSignupRole()` so it can never return `'admin'`
  * 5. Default → `'unknown'`
  *
- * @see {@link file://./../../AUTH_FLOW.md} for contributor documentation
+ * @see {@link file://./../../../docs/auth-flow.md} for contributor documentation
  * @module
  */
 

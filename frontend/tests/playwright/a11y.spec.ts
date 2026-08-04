@@ -3,6 +3,12 @@ import type { Page } from '@playwright/test';
 import { createE2eState, installE2eRoutes, seedE2eState } from './e2e-support';
 
 async function runAxe(page: Page) {
+    // The app can still be settling (hydration / client-side redirect) right
+    // after `goto` resolves. Injecting axe mid-navigation destroys the
+    // execution context, so wait for the page to go quiet first.
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForLoadState('networkidle').catch(() => {});
+
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.addStyleTag({
         content: `*, *::before, *::after { transition: none !important; animation-duration: 0s !important; opacity: 1 !important; transform: none !important; }`,

@@ -9,12 +9,10 @@ import {
     TransactionBuilder,
     Account,
     TimeoutInfinite,
-    Address,
-    nativeToScVal,
     scValToNative,
     xdr,
 } from '@stellar/stellar-sdk';
-import { credentialHashBytesToHex, credentialHashHexToScVal } from './credentialHashEncoding';
+import { credentialHashBytesToHex } from './credentialHashEncoding';
 import { runtimeConfig } from './runtimeConfig';
 import { getE2eState } from './e2e';
 
@@ -59,6 +57,7 @@ export interface OnChainCredential {
     revoked?: boolean;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- shared read helper retained for upcoming callers
 async function simulate(method: string, args: xdr.ScVal[]): Promise<unknown> {
     if (!CONTRACT_ID) {
         throw new ContractConfigurationError('Missing contract configuration: CONTRACT_ID not configured');

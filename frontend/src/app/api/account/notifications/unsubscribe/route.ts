@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
             .single();
 
         if (profile) {
-            const prefs = profile.notification_preferences as any || {};
+            const prefs = (profile.notification_preferences as Record<string, boolean> | null) ?? {};
             prefs.email_issued = false;
             prefs.email_revoked = false;
             prefs.email_verified = false;

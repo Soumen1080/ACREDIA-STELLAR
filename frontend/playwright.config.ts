@@ -17,6 +17,11 @@ const webServerEnv = {
     ADMIN_EMAIL_ALLOWLIST: 'admin@acredia.test',
 };
 
+// Allow overriding the dev-server port so a local project already listening on
+// 3000 can't be picked up by `reuseExistingServer` and audited by mistake.
+const PORT = process.env.PLAYWRIGHT_PORT ?? '3000';
+const BASE_URL = `http://127.0.0.1:${PORT}`;
+
 export default defineConfig({
     testDir: './tests/playwright',
     fullyParallel: false,
@@ -27,12 +32,12 @@ export default defineConfig({
         timeout: 10_000,
     },
     use: {
-        baseURL: 'http://127.0.0.1:3000',
+        baseURL: BASE_URL,
         trace: 'retain-on-failure',
     },
     webServer: {
-        command: 'npm run dev -- --port 3000',
-        url: 'http://127.0.0.1:3000',
+        command: `npm run dev -- --port ${PORT}`,
+        url: BASE_URL,
         reuseExistingServer: true,
         timeout: 120_000,
         env: webServerEnv,

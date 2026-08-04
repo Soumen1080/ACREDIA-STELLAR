@@ -69,9 +69,24 @@ export async function seedE2eState(page: Page, state: E2eState) {
     }, state);
 }
 
+/**
+ * Read the in-page E2E state from inside a route handler.
+ *
+ * Route callbacks can still be in flight when a test finishes, at which point
+ * `page.evaluate` throws "Test ended". Returning `null` instead lets the
+ * handler fulfil with an empty payload rather than failing the whole run.
+ */
+async function readE2eState(page: Page) {
+    try {
+        return await page.evaluate(() => window.__ACREDIA_E2E__);
+    } catch {
+        return null;
+    }
+}
+
 export async function installE2eRoutes(page: Page) {
     await page.route('**/rest/v1/institutions**', async (route) => {
-        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+        const state = await readE2eState(page);
         const institution = state?.institution;
 
         await route.fulfill({
@@ -86,6 +101,10 @@ export async function installE2eRoutes(page: Page) {
                               auth_user_id: state?.session?.user.id ?? 'user-1',
                               email: state?.session?.user.email ?? 'user@acredia.test',
                               name: institution.name,
+                              // The dashboard only exposes issuance to KYB-verified
+                              // institutions, so the E2E fixture must be verified.
+                              status: 'verified',
+                              verified: true,
                           },
                       ]
                     : [],
@@ -94,7 +113,7 @@ export async function installE2eRoutes(page: Page) {
     });
 
     await page.route('**/api/institution/credentials**', async (route) => {
-        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+        const state = await readE2eState(page);
         const credentials = state?.issuedCredentials ?? [];
 
         await route.fulfill({
@@ -111,7 +130,7 @@ export async function installE2eRoutes(page: Page) {
     });
 
     await page.route('**/api/admin/stats**', async (route) => {
-        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+        const state = await readE2eState(page);
 
         await route.fulfill({
             status: 200,
@@ -125,7 +144,7 @@ export async function installE2eRoutes(page: Page) {
 
     await page.route('**/api/admin/update-authorization**', async (route) => {
         const payload = route.request().postDataJSON() as { walletAddress?: string; transactionHash?: string };
-        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+        const state = await readE2eState(page);
 
         if (state && payload.walletAddress) {
             state.authorizedIssuers ??= [];
@@ -151,7 +170,7 @@ export async function installE2eRoutes(page: Page) {
 
     await page.route('**/api/verify/**', async (route) => {
         const token = new URL(route.request().url()).pathname.split('/').pop() ?? '';
-        const state = await page.evaluate(() => window.__ACREDIA_E2E__);
+        const state = await readE2eState(page);
         const credential = state?.issuedCredentials?.find((entry) => entry.token_id === token) ?? null;
 
         if (!credential) {

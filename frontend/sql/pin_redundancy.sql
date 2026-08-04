@@ -34,7 +34,7 @@ COMMENT ON TABLE public.credential_pins IS
     'Per-credential, per-provider IPFS pin health. A credential is only '
     'safely retrievable while at least one row here is status = pinned. '
     'Maintained by the pin-keeper worker (worker/pinKeeper.ts) — see '
-    'frontend/PIN_REDUNDANCY.md for the durability guarantee this backs.';
+    'docs/ops/pin-redundancy.md for the durability guarantee this backs.';
 
 COMMENT ON COLUMN public.credential_pins.provider IS
     '''pinata'' is the primary provider (also used at issuance time). '

@@ -176,7 +176,7 @@ function requireSecondaryPinningConfig(): { endpoint: string; token: string } {
     if (!secondaryEndpoint || !secondaryToken) {
         throw new Error(
             'Secondary pinning provider is not configured. Set SECONDARY_PINNING_ENDPOINT and ' +
-                'SECONDARY_PINNING_TOKEN — see frontend/PIN_REDUNDANCY.md.',
+                'SECONDARY_PINNING_TOKEN — see docs/ops/pin-redundancy.md.',
         );
     }
 

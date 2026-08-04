@@ -167,6 +167,7 @@ export async function GET(
     let supabase: ServiceRoleClient | null = null;
     let token: string | null = null;
     let credentialId: string | null = null;
+    let apiKeyContext: { id: string; name: string } | null = null;
 
     try {
         const { token: rawToken } = await params;
@@ -185,7 +186,13 @@ export async function GET(
             supabase = null;
         }
 
-        let apiKeyContext: { id: string, name: string } | null = null;
+        if (!supabase) {
+            return NextResponse.json(
+                { success: false, error: 'Server configuration error' },
+                { status: 500 },
+            );
+        }
+
         const authHeader = request.headers.get('authorization');
         const xApiKey = request.headers.get('x-api-key');
         let providedKey = xApiKey?.trim();

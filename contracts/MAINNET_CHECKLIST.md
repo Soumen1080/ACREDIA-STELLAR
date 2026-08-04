@@ -71,7 +71,7 @@ section is the operational go-live gate for it.
 - [ ] Someone on the team knows the manual recovery path (`RestoreFootprintOp` via Stellar CLI/
       Horizon) if an entry is archived anyway, and has practiced it on testnet at least once.
 - [ ] The **separate** off-chain IPFS pin-redundancy keeper (`frontend/worker/pinKeeper.ts`,
-      `frontend/PIN_REDUNDANCY.md`) is also deployed and running, with a second pinning provider
+      `docs/ops/pin-redundancy.md`) is also deployed and running, with a second pinning provider
       configured. The TTL keeper above only keeps the on-chain hash/URI record alive — without the
       pin keeper, a lost IPFS pin still makes the document itself unretrievable even though the
       chain record is fine.

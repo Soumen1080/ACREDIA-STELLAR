@@ -357,7 +357,7 @@ graph TD
     style AUTH fill:#10b981,color:#fff
 ```
 
-> **Deeper dive:** see [`docs/architecture.md`](docs/architecture.md) for component responsibilities and the full issue / verify / revoke data flows, [`frontend/VERIFIABLE_CREDENTIALS.md`](frontend/VERIFIABLE_CREDENTIALS.md) for the W3C Verifiable Credential / Open Badges 3.0 metadata schema, field mapping, and a third-party verification recipe, and [`frontend/PIN_REDUNDANCY.md`](frontend/PIN_REDUNDANCY.md) for the IPFS pin-redundancy/keeper durability guarantee.
+> **Deeper dive:** see [`docs/architecture.md`](docs/architecture.md) for component responsibilities and the full issue / verify / revoke data flows, [`docs/verifiable-credentials.md`](docs/verifiable-credentials.md) for the W3C Verifiable Credential / Open Badges 3.0 metadata schema, field mapping, and a third-party verification recipe, and [`docs/ops/pin-redundancy.md`](docs/ops/pin-redundancy.md) for the IPFS pin-redundancy/keeper durability guarantee.
 
 **Data flow (summary)**
 - **Issue:** institution fills the form → document + metadata (modeled as a W3C VC / Open Badges 3.0 document) pinned to IPFS → SHA-256 hash computed over the canonical payload → issuer signs `issue_credential(student, issuer, hash, ipfs_uri)` via Freighter → the credential is written on-chain and indexed in Postgres.
@@ -1166,6 +1166,10 @@ Deeper documentation lives under [`docs/`](docs/):
 
 - **[Product Vision & Positioning](docs/product/vision.md)** — what Acredia is, who it's for, personas, differentiators, and the business model.
 - **[Architecture](docs/architecture.md)** — components, layers, and the issue / verify / revoke data flows.
+- **[Authentication & roles](docs/auth-flow.md)** — how sessions, role resolution, and route guards work.
+- **[Verifiable Credentials](docs/verifiable-credentials.md)** — the W3C VC / Open Badges 3.0 metadata schema, field mapping, and a third-party verification recipe.
+- **[IPFS pin redundancy](docs/ops/pin-redundancy.md)** — the pin-keeper and the durability guarantee for issued credentials.
+- **[Operations runbook](docs/ops/runbook.md)** — on-call procedures and incident response.
 - **[Contract reference](contracts/README.md)** — the Soroban `AcrediaCredential` contract, storage/TTL model, and deployment.
 - **[Roadmap & backlog](ISSUE_DRAFTS.md)** — the production & market issue backlog.
 - **API reference** — _planned (see the "public verification API" item in the backlog)._

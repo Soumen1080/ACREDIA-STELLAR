@@ -15,7 +15,7 @@
  * long-lived daemon process.
  *
  * Required environment variables (same names the Next.js app itself uses —
- * see frontend/PIN_REDUNDANCY.md):
+ * see docs/ops/pin-redundancy.md):
  *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PINATA_JWT
  * Optional (enables the second provider — without it, the keeper still
  * verifies/repairs Pinata alone, and every secondary row records

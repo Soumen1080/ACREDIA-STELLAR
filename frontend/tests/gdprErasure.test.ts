@@ -15,8 +15,21 @@ import { join } from 'node:path';
 // ---------------------------------------------------------------------------
 
 const sqlDir = join(process.cwd(), 'sql');
+const migrationsDir = join(process.cwd(), 'supabase', 'migrations');
+
+// The consolidated schema now lives as a versioned Supabase migration; the
+// legacy FULL_SETUP.sql / database_schema.sql names map onto it so these
+// schema-contract assertions keep protecting the same DDL.
+const LEGACY_SCHEMA_FILES: Record<string, string> = {
+    'FULL_SETUP.sql': '20260730000000_initial_schema.sql',
+    'database_schema.sql': '20260730000000_initial_schema.sql',
+};
 
 function readSql(name: string) {
+    const mapped = LEGACY_SCHEMA_FILES[name];
+    if (mapped) {
+        return readFileSync(join(migrationsDir, mapped), 'utf8');
+    }
     return readFileSync(join(sqlDir, name), 'utf8');
 }
 

@@ -16,7 +16,7 @@ single point of failure**: if that one pin is lost (account issue, provider
 outage, accidental unpin), the on-chain hash and token still exist, but the
 actual diploma/transcript/certificate becomes unretrievable — `verify_credential`
 still succeeds, but there is no document for `GET /api/verify/{token}` or a
-"Download VC (.json)" button (see `frontend/VERIFIABLE_CREDENTIALS.md`) to
+"Download VC (.json)" button (see `docs/verifiable-credentials.md`) to
 actually fetch.
 
 This is solved with two independent mechanisms:
@@ -91,7 +91,7 @@ every 5–15 minutes).
   yet — every `credential_pins` row for the `secondary` provider reports
   `not_configured`, and the keeper only verifies/repairs Pinata. This is
   visible, not silent: check `is_secondary_pinning_configured` via
-  `frontend/PIN_REDUNDANCY.md` §4 or ask your Acredia operator.
+  `docs/ops/pin-redundancy.md` §4 or ask your Acredia operator.
 - **This is active-pinning redundancy, not permanent archival.** Both
   providers can, in principle, still be lost simultaneously (e.g. neither
   gets paid). For credentials that must survive independent of any ongoing

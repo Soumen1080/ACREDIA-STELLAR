@@ -23,7 +23,7 @@
  *    generic VC/OBv3 consumer can actually open them.
  *  - No `proof` block is embedded in the hashed core: this system's proof of
  *    issuance is the Stellar on-chain transaction + anchored hash, not an
- *    embedded Data Integrity signature. See docs/VERIFIABLE_CREDENTIALS.md
+ *    embedded Data Integrity signature. See docs/verifiable-credentials.md
  *    for the verification recipe.
  */
 
@@ -260,7 +260,7 @@ export interface OnChainAnchor {
      * still report their real on-chain hash here, but it covers the legacy
      * metadata shape, not this reconstructed VC — set to `false` in that
      * case so downstream consumers don't assume a hash match that doesn't
-     * hold. See docs/VERIFIABLE_CREDENTIALS.md.
+     * hold. See docs/verifiable-credentials.md.
      */
     hashCoversThisDocument: boolean;
 }

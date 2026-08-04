@@ -104,6 +104,18 @@ function happySupabaseClient() {
                     })),
                 };
             }
+            if (table === 'indexer_state') {
+                return {
+                    select: vi.fn(() => ({
+                        eq: vi.fn(() => ({
+                            maybeSingle: vi.fn(() => ({
+                                data: { last_ledger: 0, updated_at: null },
+                                error: null,
+                            })),
+                        })),
+                    })),
+                };
+            }
             return {
                 select: vi.fn(() => ({
                     count: 0,

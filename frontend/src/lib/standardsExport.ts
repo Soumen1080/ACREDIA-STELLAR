@@ -154,7 +154,7 @@ export async function buildStandardsExportDocument(
         transactionHash: row.blockchainHash || '',
         credentialHash,
         hashAlgorithm,
-        canonicalizationAlgorithm: 'sha256:canonical-json (see docs/VERIFIABLE_CREDENTIALS.md)',
+        canonicalizationAlgorithm: 'sha256:canonical-json (see docs/verifiable-credentials.md)',
         verifyUrl: verifyUrl(row.tokenId),
         hashCoversThisDocument,
     };
