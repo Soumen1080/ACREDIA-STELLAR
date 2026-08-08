@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { CONTACT_EMAIL } from '@/lib/contact';
 
 export const metadata: Metadata = {
     title: 'Terms of Service — Acredia',
@@ -7,7 +8,6 @@ export const metadata: Metadata = {
 };
 
 const LAST_UPDATED = '28 July 2026';
-const CONTACT_EMAIL = 'legal@acredia.app';
 
 export default function TermsOfServicePage() {
     return (

@@ -18,7 +18,7 @@ function readSql(...segments: string[]) {
     return readFileSync(join(process.cwd(), ...segments), 'utf8');
 }
 
-const gdprErasure = readSql('sql', 'gdpr_erasure.sql');
+const gdprErasure = readSql('supabase', 'migrations', '20260801000000_gdpr_erasure.sql');
 // The schema is consolidated into a single idempotent Supabase migration
 // file; there is no separate database_schema.sql anymore (it was folded in).
 const fullSetup = readSql('supabase', 'migrations', '20260730000000_initial_schema.sql');

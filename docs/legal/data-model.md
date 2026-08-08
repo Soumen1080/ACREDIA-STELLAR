@@ -132,6 +132,6 @@ POST /api/account/erase   (bearer token required)
 - [GDPR Art. 17(3)(b) — Exemption](https://gdpr-info.eu/art-17-gdpr/)
 - [Pinata Unpin API](https://docs.pinata.cloud/api-reference/endpoint/unpin-file)
 - [Stellar Ledger Immutability](https://developers.stellar.org/docs/learn/fundamentals)
-- `frontend/sql/gdpr_erasure.sql` — SQL migration
+- `frontend/supabase/migrations/20260801000000_gdpr_erasure.sql` — SQL migration
 - `frontend/src/app/api/account/erase/route.ts` — API route
 - `frontend/src/app/legal/privacy/page.tsx` — Privacy Policy

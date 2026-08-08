@@ -5,7 +5,7 @@
  * credential's document becomes unretrievable even though the on-chain
  * record and hash still exist. This module tracks pin health per
  * credential per provider (`public.credential_pins`, one row per
- * provider — see `sql/pin_redundancy.sql`) and periodically verifies and
+ * provider — see `supabase/migrations/` (credential_pins)) and periodically verifies and
  * repairs it.
  *
  * Split into a pure decision layer (`processPinCandidate` /

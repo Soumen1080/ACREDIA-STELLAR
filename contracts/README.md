@@ -503,4 +503,4 @@ For issues or questions:
 
 ## Questions & Support
 
-For any questions or suggestions, open an issue on the [GitHub repository](https://github.com/Soumen1080/ACREDIA-STELLAR) or refer to the [Stellar Developers documentation](https://developers.stellar.org/).
+For any questions or suggestions, open an issue on the [GitHub repository](https://github.com/soumen0818/ACREDIA-STELLAR) or refer to the [Stellar Developers documentation](https://developers.stellar.org/).

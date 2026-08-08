@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
+import { CONTACT_MAILTO, GITHUB_REPO_URL } from '@/lib/contact';
 
 function GithubMark({ className }: { className?: string }) {
     return (
@@ -32,9 +33,10 @@ const footerNav: { heading: string; links: { label: string; href: string; extern
     {
         heading: 'Resources',
         links: [
-            { label: 'GitHub', href: 'https://github.com/soumen0818/ACREDIA-STELLAR', external: true },
+            { label: 'GitHub', href: GITHUB_REPO_URL, external: true },
             { label: 'Stellar Network', href: 'https://stellar.org', external: true },
             { label: 'Stellar Explorer', href: 'https://stellar.expert', external: true },
+            { label: 'Contact us', href: CONTACT_MAILTO, external: true },
         ],
     },
     {
@@ -120,7 +122,7 @@ export function SiteFooter() {
                             Blockchain-secured
                         </span>
                         <a
-                            href="https://github.com/soumen0818/ACREDIA-STELLAR"
+                            href={GITHUB_REPO_URL}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"

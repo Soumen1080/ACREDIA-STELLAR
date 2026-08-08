@@ -55,7 +55,7 @@ issue_credential ──▶ INSERT credentials row
 
 Every credential gets a `credential_pins` row for **both** providers the
 moment it's issued (a database trigger, not application code — see
-`sql/pin_redundancy.sql` — so there is no "onboarding" gap and no way for a
+`supabase/migrations/` (the `credential_pins` table) — so there is no "onboarding" gap and no way for a
 credential to slip through untracked). The keeper's next scheduled sweep
 picks up both rows within one cycle.
 
@@ -194,7 +194,7 @@ richer alerting is wired up.
 
 ## 8. GDPR erasure interaction
 
-`process_erasure()` (`sql/gdpr_erasure.sql`) unpins a user's credential
+`process_erasure()` (`supabase/migrations/20260801000000_gdpr_erasure.sql`) unpins a user's credential
 documents from Pinata and redacts `credentials.metadata` to
 `{"redacted": true}`. The keeper checks for this sentinel before doing
 anything else for a candidate row and, if present, marks it `erased` and

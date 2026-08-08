@@ -468,7 +468,7 @@ Use npm for the frontend. This repository commits `frontend/package-lock.json`, 
 From a fresh clone:
 
 ```powershell
-git clone https://github.com/Soumen1080/ACREDIA-STELLAR.git
+git clone https://github.com/soumen0818/ACREDIA-STELLAR.git
 cd ACREDIA-STELLAR\frontend
 npm ci
 Copy-Item .env.local.example .env.local
@@ -495,7 +495,7 @@ Before you begin, ensure you have the following installed:
 1. **Clone the Repository**
 
 ```powershell
-git clone https://github.com/Soumen1080/ACREDIA-STELLAR.git
+git clone https://github.com/soumen0818/ACREDIA-STELLAR.git
 cd ACREDIA-STELLAR
 ```
 
@@ -577,21 +577,21 @@ STELLAR_CONTRACT_ID=
 
 5. **Set Up Supabase Database**
 
-Run the canonical SQL setup in your Supabase SQL Editor. For a fresh Supabase
-project, run the single idempotent setup file:
+Run the canonical SQL setup in your Supabase SQL Editor. Paste and run the
+single consolidated file:
 
-```sql
-frontend/sql/FULL_SETUP.sql
+```
+frontend/supabase/schema.sql
 ```
 
-`FULL_SETUP.sql` creates tables, indexes, triggers, canonical credential hash
-metadata columns, and production RLS policies. It can be safely re-run after
-older deployments. `frontend/sql/database_schema.sql` is kept as a focused base
-schema reference, but clean deployments should use `FULL_SETUP.sql`.
+`schema.sql` creates every table, index, trigger, function and RLS policy the
+app needs. **It is fully idempotent and safe to re-run** — existing objects are
+skipped, missing ones are created, and no data is dropped. Run it again after
+pulling changes to bring an older database up to date.
 
-The older one-off SQL repair scripts are retained only as compatibility notices:
-they point back to the canonical setup flow and should not be run for new
-deployments.
+It is generated from `frontend/supabase/migrations/*.sql` (the source of truth).
+After adding a migration, regenerate it with `npm run db:schema`. If you use the
+Supabase CLI instead, `npx supabase db push` applies the same migrations.
 
 ### Smart Contract Deployment
 
@@ -676,7 +676,7 @@ Before deploying to production:
 - Use Stellar Public Network values only after contract review and a verified mainnet deployment.
 - Rotate any secret that was pasted into chat, screenshots, logs, browser code, or an issue.
 - Set server-only secrets (`SUPABASE_SERVICE_ROLE_KEY`, `PINATA_JWT`, `VERIFICATION_LOG_HASH_SECRET`, Stellar secret keys) only in the hosting provider's protected environment variables.
-- Confirm Supabase RLS is enabled and production policies come from `frontend/sql/FULL_SETUP.sql`.
+- Confirm Supabase RLS is enabled and production policies come from `frontend/supabase/schema.sql`.
 - Verify contract IDs on Stellar Expert before pointing users at a production environment.
 
 See `SECRETS_ROTATION.md` for the complete key-rotation runbook and pre-commit/CI secret-scan workflow.
@@ -703,9 +703,7 @@ See `SECRETS_ROTATION.md` for the complete key-rotation runbook and pre-commit/C
 1. Create account at [Supabase](https://supabase.com)
 2. Create a new project
 3. Get your project URL and anon key from Settings > API
-4. Run `frontend/sql/FULL_SETUP.sql` in the Supabase SQL Editor.
-
-The base `frontend/sql/database_schema.sql` file is retained as a schema reference. For a clean clone, use `FULL_SETUP.sql`.
+4. Run `frontend/supabase/schema.sql` in the Supabase SQL Editor (safe to re-run at any time).
 
 #### Stellar Account Setup
 
@@ -1205,9 +1203,10 @@ Built with amazing open-source technologies:
 
 For questions, feedback, or support:
 
-- Open an issue on [GitHub Issues](https://github.com/Soumen1080/ACREDIA-STELLAR/issues)
-- Check existing issues for solutions
-- Include setup steps, affected file paths, expected behavior, actual behavior, and labels such as `bug`, `docs`, `frontend`, `contracts`, or `database`.
+- **Email:** [acredia.stellar@gmail.com](mailto:acredia.stellar@gmail.com)
+- **Issues:** open one on [GitHub Issues](https://github.com/soumen0818/ACREDIA-STELLAR/issues) — check existing issues first
+- When reporting a bug, include setup steps, affected file paths, expected behavior, actual behavior, and labels such as `bug`, `docs`, `frontend`, `contracts`, or `database`.
+- **Security vulnerabilities:** do **not** open a public issue — email us instead.
 
 ---
 

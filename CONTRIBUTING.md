@@ -36,7 +36,7 @@ Please avoid:
 Use npm for frontend work. The repository commits `frontend/package-lock.json`, and CI uses `npm ci`.
 
 ```powershell
-git clone https://github.com/Soumen1080/ACREDIA-STELLAR.git
+git clone https://github.com/soumen0818/ACREDIA-STELLAR.git
 cd ACREDIA-STELLAR\frontend
 npm ci
 Copy-Item .env.local.example .env.local

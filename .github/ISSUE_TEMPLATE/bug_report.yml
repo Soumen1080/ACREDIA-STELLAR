@@ -37,7 +37,7 @@ body:
       description: List exact files or folders. Use repository-relative paths.
       placeholder: |
         frontend/src/lib/contracts.ts
-        frontend/sql/secure_rls_migration.sql
+        frontend/supabase/migrations/
         contracts/src/lib.rs
         README.md
     validations:
@@ -48,7 +48,7 @@ body:
       label: Clean-clone setup steps
       description: Paste the exact commands and env setup you used from a clean clone. Include any deviations from README.md.
       placeholder: |
-        git clone https://github.com/Soumen1080/ACREDIA-STELLAR.git
+        git clone https://github.com/soumen0818/ACREDIA-STELLAR.git
         cd ACREDIA-STELLAR/frontend
         npm ci
         cp .env.local.example .env.local
