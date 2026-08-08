@@ -28,6 +28,7 @@ const navLinks = [
     { href: '/verify', label: 'Verify' },
     { href: '/issuers', label: 'Issuers' },
     { href: '/about', label: 'About' },
+    { href: '/contact', label: 'Contact' },
 ];
 
 export function SiteNavbar() {

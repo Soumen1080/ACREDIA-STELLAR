@@ -8,7 +8,7 @@ export const metadata: Metadata = {
         'How Acredia collects, uses, and protects your personal data, your GDPR rights, and how on-chain immutability is handled.',
 };
 
-const LAST_UPDATED = '28 July 2026';
+const LAST_UPDATED = '8 August 2026';
 
 export default function PrivacyPolicyPage() {
     return (
@@ -26,6 +26,21 @@ export default function PrivacyPolicyPage() {
                 </div>
 
                 <div className="prose prose-neutral dark:prose-invert max-w-none space-y-10 text-foreground">
+
+                    {/* Service-stage notice */}
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-5">
+                        <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                            Service stage: Stellar test network
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                            Acredia currently operates on the <strong>Stellar test network</strong>.
+                            Credentials issued today are for evaluation and demonstration purposes and
+                            should not be relied upon as authoritative academic records. Test networks
+                            may be reset by their operators, which can make on-chain records
+                            unavailable. This notice will be updated when the service moves to the
+                            Stellar public network.
+                        </p>
+                    </div>
 
                     {/* 1 - Who we are */}
                     <section aria-labelledby="who-we-are">
@@ -58,7 +73,7 @@ export default function PrivacyPolicyPage() {
                                         <td className="px-4 py-3 font-medium text-foreground">Account</td>
                                         <td className="px-4 py-3">Email address, display name, role (student / institution)</td>
                                         <td className="px-4 py-3">Contract (Art. 6(1)(b))</td>
-                                        <td className="px-4 py-3">Supabase DB (EU region)</td>
+                                        <td className="px-4 py-3">Supabase DB (Asia-Pacific region)</td>
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3 font-medium text-foreground">Wallet</td>
@@ -79,10 +94,16 @@ export default function PrivacyPolicyPage() {
                                         <td className="px-4 py-3">Supabase DB — purged after 90 days</td>
                                     </tr>
                                     <tr>
+                                        <td className="px-4 py-3 font-medium text-foreground">Contact form</td>
+                                        <td className="px-4 py-3">Name, email address, message content, hashed IP address, browser user-agent</td>
+                                        <td className="px-4 py-3">Legitimate interest (responding to your enquiry, Art. 6(1)(f))</td>
+                                        <td className="px-4 py-3">Supabase DB — deleted within 24 months</td>
+                                    </tr>
+                                    <tr>
                                         <td className="px-4 py-3 font-medium text-foreground">On-chain record</td>
                                         <td className="px-4 py-3">SHA-256 hash of credential metadata + IPFS CID pointer</td>
                                         <td className="px-4 py-3">Public interest / legal obligation (Art. 6(1)(e), 17(3)(b))</td>
-                                        <td className="px-4 py-3">Stellar blockchain — immutable (see §6)</td>
+                                        <td className="px-4 py-3">Stellar blockchain — immutable (see §7)</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -107,8 +128,11 @@ export default function PrivacyPolicyPage() {
                         <h2 id="data-sharing" className="text-2xl font-semibold">4. Data sharing &amp; sub-processors</h2>
                         <ul className="mt-4 list-disc space-y-2 pl-6 text-muted-foreground leading-7">
                             <li>
-                                <strong className="text-foreground">Supabase</strong> — database and authentication
-                                (EU-hosted). We have a Data Processing Agreement (DPA) in place.
+                                <strong className="text-foreground">Supabase</strong> — database and
+                                authentication, hosted in the{' '}
+                                <strong className="text-foreground">Asia-Pacific region</strong>.
+                                Supabase&apos;s Data Processing Addendum, which incorporates the EU
+                                Standard Contractual Clauses, governs this processing (see §5).
                             </li>
                             <li>
                                 <strong className="text-foreground">Pinata / IPFS</strong> — decentralised file
@@ -126,9 +150,45 @@ export default function PrivacyPolicyPage() {
                         </p>
                     </section>
 
+                    {/* 5 - International transfers */}
+                    <section aria-labelledby="transfers">
+                        <h2 id="transfers" className="text-2xl font-semibold">5. International data transfers</h2>
+                        <p className="mt-4 text-muted-foreground leading-7">
+                            Our primary database and authentication provider (Supabase) hosts data in
+                            the <strong className="text-foreground">Asia-Pacific region</strong>. If
+                            you are located in the European Economic Area or the United Kingdom, this
+                            means your personal data is{' '}
+                            <strong className="text-foreground">
+                                transferred and stored outside the EEA/UK
+                            </strong>
+                            .
+                        </p>
+                        <p className="mt-4 text-muted-foreground leading-7">
+                            Such transfers are made under the safeguards permitted by Chapter V GDPR —
+                            principally the European Commission&apos;s{' '}
+                            <strong className="text-foreground">Standard Contractual Clauses</strong>{' '}
+                            (and the UK International Data Transfer Addendum where applicable),
+                            incorporated through our agreements with each sub-processor. You may
+                            request a copy of the relevant safeguards at any time.
+                        </p>
+                        <p className="mt-4 text-muted-foreground leading-7">
+                            Note that the <strong className="text-foreground">Stellar network</strong> and{' '}
+                            <strong className="text-foreground">IPFS</strong> are public, distributed
+                            systems: data written to them is replicated across nodes worldwide and its
+                            geographic location cannot be controlled. Only irreversible hashes,
+                            wallet addresses and encrypted content are published to these networks —
+                            never plain-text personal data. You can request details of our current
+                            transfer safeguards at{' '}
+                            <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary underline">
+                                {CONTACT_EMAIL}
+                            </a>
+                            .
+                        </p>
+                    </section>
+
                     {/* 5 - Retention */}
                     <section aria-labelledby="retention">
-                        <h2 id="retention" className="text-2xl font-semibold">5. Data retention</h2>
+                        <h2 id="retention" className="text-2xl font-semibold">6. Data retention</h2>
                         <div className="mt-4 overflow-x-auto rounded-lg border border-border">
                             <table className="w-full text-sm">
                                 <thead className="bg-secondary/50">
@@ -155,6 +215,10 @@ export default function PrivacyPolicyPage() {
                                         <td className="px-4 py-3">Permanent (see §6)</td>
                                     </tr>
                                     <tr>
+                                        <td className="px-4 py-3">Contact form messages</td>
+                                        <td className="px-4 py-3">24 months from last correspondence, then deleted</td>
+                                    </tr>
+                                    <tr>
                                         <td className="px-4 py-3">Erasure request records</td>
                                         <td className="px-4 py-3">7 years (legal compliance)</td>
                                     </tr>
@@ -165,7 +229,7 @@ export default function PrivacyPolicyPage() {
 
                     {/* 6 - On-chain immutability */}
                     <section aria-labelledby="on-chain">
-                        <h2 id="on-chain" className="text-2xl font-semibold">6. On-chain data &amp; immutability</h2>
+                        <h2 id="on-chain" className="text-2xl font-semibold">7. On-chain data &amp; immutability</h2>
                         <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-5">
                             <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
                                 Important notice about blockchain data
@@ -188,22 +252,18 @@ export default function PrivacyPolicyPage() {
                             </p>
                         </div>
                         <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                            See{' '}
-                            <a
-                                href="https://github.com/soumen0818/ACREDIA-STELLAR/blob/main/docs/legal/data-model.md"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary underline"
-                            >
-                                docs/legal/data-model.md
-                            </a>{' '}
-                            for the full technical data-model documentation.
+                            For the full technical data-model documentation, or a copy of our
+                            records-of-processing, contact us at{' '}
+                            <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary underline">
+                                {CONTACT_EMAIL}
+                            </a>
+                            .
                         </p>
                     </section>
 
                     {/* 7 - Your rights */}
                     <section aria-labelledby="your-rights">
-                        <h2 id="your-rights" className="text-2xl font-semibold">7. Your rights</h2>
+                        <h2 id="your-rights" className="text-2xl font-semibold">8. Your rights</h2>
                         <p className="mt-4 text-muted-foreground leading-7">
                             Under GDPR you have the following rights:
                         </p>
@@ -230,7 +290,7 @@ export default function PrivacyPolicyPage() {
 
                     {/* 8 - Cookies */}
                     <section aria-labelledby="cookies">
-                        <h2 id="cookies" className="text-2xl font-semibold">8. Cookies &amp; analytics</h2>
+                        <h2 id="cookies" className="text-2xl font-semibold">9. Cookies &amp; analytics</h2>
                         <p className="mt-4 text-muted-foreground leading-7">
                             Acredia uses only strictly-necessary session cookies required for authentication
                             (Supabase auth tokens stored in browser localStorage). No third-party analytics
@@ -241,25 +301,63 @@ export default function PrivacyPolicyPage() {
 
                     {/* 9 - Security */}
                     <section aria-labelledby="security">
-                        <h2 id="security" className="text-2xl font-semibold">9. Security</h2>
+                        <h2 id="security" className="text-2xl font-semibold">10. Security</h2>
                         <p className="mt-4 text-muted-foreground leading-7">
                             All data in transit is encrypted with TLS. Credential documents stored on IPFS
                             are encrypted with AES-256-GCM before upload. Database access is protected by
-                            Row Level Security (RLS) policies. We follow responsible disclosure — see{' '}
-                            <a
-                                href="https://github.com/soumen0818/ACREDIA-STELLAR/blob/main/SECURITY.md"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary underline"
-                            >
-                                SECURITY.md
-                            </a>.
+                            Row Level Security (RLS) policies. We follow responsible disclosure — if
+                            you believe you have found a vulnerability, please report it privately to{' '}
+                            <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary underline">
+                                {CONTACT_EMAIL}
+                            </a>{' '}
+                            rather than disclosing it publicly.
                         </p>
                     </section>
 
-                    {/* 10 - Contact */}
+                    {/* Children's data */}
+                    <section aria-labelledby="children">
+                        <h2 id="children" className="text-2xl font-semibold">11. Children&apos;s data</h2>
+                        <p className="mt-4 text-muted-foreground leading-7">
+                            Acredia is not directed at children. Accounts are intended for users aged{' '}
+                            <strong className="text-foreground">16 or over</strong> (or the minimum
+                            age of digital consent in your jurisdiction, where higher). We do not
+                            knowingly collect personal data from children below that age. Where an
+                            institution issues a credential relating to a minor, the institution acts
+                            as controller for that record and is responsible for obtaining any
+                            necessary parental consent. If you believe a child has provided us with
+                            personal data, contact us and we will delete it promptly.
+                        </p>
+                    </section>
+
+                    {/* Automated decision-making */}
+                    <section aria-labelledby="automated">
+                        <h2 id="automated" className="text-2xl font-semibold">12. Automated decision-making</h2>
+                        <p className="mt-4 text-muted-foreground leading-7">
+                            We do not carry out automated decision-making or profiling that produces
+                            legal effects concerning you, or that similarly significantly affects you,
+                            within the meaning of <strong className="text-foreground">Art. 22 GDPR</strong>.
+                            Credential verification is a deterministic cryptographic comparison — it
+                            checks whether a hash matches an on-chain record and does not evaluate,
+                            score, or profile individuals.
+                        </p>
+                    </section>
+
+                    {/* Changes */}
+                    <section aria-labelledby="changes">
+                        <h2 id="changes" className="text-2xl font-semibold">13. Changes to this policy</h2>
+                        <p className="mt-4 text-muted-foreground leading-7">
+                            We may update this Privacy Policy to reflect changes to the service, our
+                            sub-processors, or applicable law. The &ldquo;Last updated&rdquo; date at
+                            the top of this page always reflects the current version. Where a change
+                            materially affects how we process your personal data, we will provide
+                            notice — for example by email or an in-app notice — before it takes
+                            effect.
+                        </p>
+                    </section>
+
+                    {/* Contact */}
                     <section aria-labelledby="contact">
-                        <h2 id="contact" className="text-2xl font-semibold">10. Contact &amp; complaints</h2>
+                        <h2 id="contact" className="text-2xl font-semibold">14. Contact &amp; complaints</h2>
                         <p className="mt-4 text-muted-foreground leading-7">
                             For any privacy-related query, contact us at{' '}
                             <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary underline">

@@ -17,10 +17,41 @@ import {
     sanitizeAuthRedirect,
 } from '@/lib/authFlow';
 
+/**
+ * Presentational copy for the shared sign-in page.
+ *
+ * The `role` query parameter ONLY changes the heading so the entry points
+ * linked from the footer feel purpose-built. It grants nothing: the account's
+ * real role is always resolved server-side after authentication, so passing an
+ * arbitrary value here cannot escalate privileges.
+ */
+const LOGIN_COPY = {
+    student: {
+        title: 'Student sign in',
+        subtitle: 'Access the credentials issued to you and share them with anyone.',
+    },
+    institution: {
+        title: 'Institution sign in',
+        subtitle: 'Issue, manage, and revoke credentials for your students.',
+    },
+    default: {
+        title: 'Welcome back',
+        subtitle: 'Sign in to access your Acredia dashboard.',
+    },
+} as const;
+
 function LoginForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const nextRedirect = sanitizeAuthRedirect(searchParams.get('next'));
+
+    const roleParam = searchParams.get('role');
+    const copy =
+        roleParam === 'student'
+            ? LOGIN_COPY.student
+            : roleParam === 'institution'
+              ? LOGIN_COPY.institution
+              : LOGIN_COPY.default;
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -100,8 +131,8 @@ function LoginForm() {
 
     return (
         <AuthShell
-            title="Welcome back"
-            subtitle="Sign in to access your Acredia dashboard."
+            title={copy.title}
+            subtitle={copy.subtitle}
             footer={
                 <div className="space-y-4 text-center">
                     <p className="text-sm text-muted-foreground">

@@ -169,11 +169,61 @@
     html {
         scroll-behavior: smooth;
         -webkit-text-size-adjust: 100%;
+
+        /* Firefox + any engine supporting the standard properties. */
+        scrollbar-width: thin;
+        scrollbar-color: color-mix(in srgb, var(--primary) 28%, transparent) transparent;
     }
 
     html,
     body {
         overflow-x: hidden;
+    }
+
+    /* ── Custom scrollbar (WebKit / Chromium / Safari) ──────────────────
+       Replaces the default OS scrollbar with a slim, brand-tinted one.
+       The track stays transparent so it blends into whatever surface it
+       sits on, and the thumb darkens on hover for clear affordance. */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background-color: color-mix(in srgb, var(--primary) 26%, transparent);
+        border-radius: 9999px;
+        /* Inset the thumb so it reads as a floating pill, not a full-width bar. */
+        border: 2px solid transparent;
+        background-clip: content-box;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background-color: color-mix(in srgb, var(--primary) 45%, transparent);
+    }
+
+    ::-webkit-scrollbar-thumb:active {
+        background-color: color-mix(in srgb, var(--primary) 60%, transparent);
+    }
+
+    /* Where the vertical and horizontal bars meet. */
+    ::-webkit-scrollbar-corner {
+        background: transparent;
+    }
+
+    /* On dark surfaces (e.g. the navy auth panel) a navy thumb is invisible,
+       so switch to a light thumb inside those containers. */
+    .bg-brand-mesh ::-webkit-scrollbar-thumb,
+    .bg-brand-gradient ::-webkit-scrollbar-thumb {
+        background-color: rgb(255 255 255 / 0.28);
+    }
+
+    .bg-brand-mesh ::-webkit-scrollbar-thumb:hover,
+    .bg-brand-gradient ::-webkit-scrollbar-thumb:hover {
+        background-color: rgb(255 255 255 / 0.45);
     }
 
     body {

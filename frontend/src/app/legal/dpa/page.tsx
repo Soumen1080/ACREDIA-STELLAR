@@ -8,7 +8,7 @@ export const metadata: Metadata = {
         'Data Processing Agreement (DPA) template for institutions using Acredia as a data processor.',
 };
 
-const LAST_UPDATED = '28 July 2026';
+const LAST_UPDATED = '8 August 2026';
 
 export default function DpaPage() {
     return (
@@ -44,6 +44,18 @@ export default function DpaPage() {
                 </div>
 
                 <div className="space-y-10 text-foreground">
+
+                    {/* Service-stage notice */}
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-5">
+                        <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                            Service stage: Stellar test network
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                            Acredia currently operates on the <strong>Stellar test network</strong> on a
+                            beta basis. Controllers should not process production student records
+                            through the Service until it moves to the Stellar public network.
+                        </p>
+                    </div>
 
                     <section aria-labelledby="definitions">
                         <h2 id="definitions" className="text-2xl font-semibold">1. Definitions</h2>
@@ -115,8 +127,70 @@ export default function DpaPage() {
                             <li>AES-256-GCM encryption for credential documents stored on IPFS.</li>
                             <li>Row Level Security (RLS) enforced at the database layer.</li>
                             <li>API rate limiting and bearer-token authentication on all data endpoints.</li>
-                            <li>Regular security reviews and responsible disclosure policy (see SECURITY.md).</li>
+                            <li>Regular security reviews and a responsible-disclosure process for reported vulnerabilities.</li>
                         </ul>
+                    </section>
+
+                    <section aria-labelledby="breach">
+                        <h2 id="breach" className="text-2xl font-semibold">7. Personal data breach notification</h2>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            Acredia shall notify the Controller <strong>without undue delay</strong> and,
+                            where feasible, within <strong>48 hours</strong> of becoming aware of a
+                            personal data breach affecting the Controller&apos;s data. The notification
+                            will describe, to the extent known: the nature of the breach and the
+                            categories and approximate number of data subjects and records concerned;
+                            the likely consequences; and the measures taken or proposed to address it
+                            and mitigate its effects.
+                        </p>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            Acredia shall provide reasonable assistance to enable the Controller to meet
+                            its own obligations under <strong>Art. 33 and 34 GDPR</strong>, including
+                            any notification to a supervisory authority or to affected data subjects.
+                            Reporting a breach is not an admission of fault or liability by either
+                            party.
+                        </p>
+                    </section>
+
+                    <section aria-labelledby="transfers">
+                        <h2 id="transfers" className="text-2xl font-semibold">8. International transfers</h2>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            The Controller acknowledges that Acredia&apos;s database and authentication
+                            sub-processor hosts data in the{' '}
+                            <strong className="text-foreground">Asia-Pacific region</strong>, and its
+                            IPFS pinning sub-processor in the{' '}
+                            <strong className="text-foreground">United States</strong> (see Schedule
+                            B). Personal data processed under this DPA is therefore stored outside the
+                            EEA and the UK.
+                        </p>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            Each such transfer is made under an appropriate safeguard permitted by
+                            Chapter V GDPR — principally the European Commission&apos;s{' '}
+                            <strong className="text-foreground">Standard Contractual Clauses</strong>{' '}
+                            (and the UK International Data Transfer Addendum where applicable),
+                            incorporated through Acredia&apos;s agreement with each sub-processor. On
+                            request, Acredia will provide the Controller with the information needed to
+                            complete a transfer impact assessment.
+                        </p>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            The Controller acknowledges that the <strong>Stellar network</strong> and{' '}
+                            <strong>IPFS</strong> are public, globally distributed systems whose node
+                            locations cannot be controlled by either party. Only irreversible hashes,
+                            wallet addresses and encrypted content are published to those networks; no
+                            plain-text personal data is transferred to them.
+                        </p>
+                    </section>
+
+                    <section aria-labelledby="duration">
+                        <h2 id="duration" className="text-2xl font-semibold">9. Duration &amp; termination</h2>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            This DPA takes effect when the Controller begins using the Service and
+                            remains in force for as long as Acredia processes personal data on the
+                            Controller&apos;s behalf. On termination, Acredia will delete or return the
+                            Controller&apos;s personal data at the Controller&apos;s choice, save where
+                            storage is required by law and save for the immutable on-chain hashes
+                            described in §5. Clauses which by their nature should survive termination
+                            (including confidentiality and §5) continue to apply.
+                        </p>
                     </section>
 
                     <section aria-labelledby="sub-processors">
@@ -166,7 +240,7 @@ export default function DpaPage() {
                                 <tbody className="divide-y divide-border text-muted-foreground">
                                     <tr>
                                         <td className="px-4 py-3 font-medium text-foreground">Supabase</td>
-                                        <td className="px-4 py-3">EU (Frankfurt)</td>
+                                        <td className="px-4 py-3">Asia-Pacific</td>
                                         <td className="px-4 py-3">Database &amp; auth</td>
                                         <td className="px-4 py-3">DPA + SCCs</td>
                                     </tr>

@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     description: 'Terms and conditions governing use of the Acredia academic credential platform.',
 };
 
-const LAST_UPDATED = '28 July 2026';
+const LAST_UPDATED = '8 August 2026';
 
 export default function TermsOfServicePage() {
     return (
@@ -25,6 +25,21 @@ export default function TermsOfServicePage() {
                 </div>
 
                 <div className="space-y-10 text-foreground">
+
+                    {/* Service-stage notice */}
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-5">
+                        <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
+                            Service stage: Stellar test network (beta)
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                            The Service currently runs on the <strong>Stellar test network</strong> and
+                            is provided on a beta, evaluation basis. Credentials issued today are for
+                            demonstration purposes and must not be relied upon as authoritative
+                            academic records. Test networks may be reset by their operators, which can
+                            make on-chain records permanently unavailable. Features, availability and
+                            data may change or be removed without notice while the Service is in beta.
+                        </p>
+                    </div>
 
                     <section aria-labelledby="acceptance">
                         <h2 id="acceptance" className="text-2xl font-semibold">1. Acceptance of terms</h2>
@@ -116,8 +131,34 @@ export default function TermsOfServicePage() {
                         </p>
                     </section>
 
+                    <section aria-labelledby="fees">
+                        <h2 id="fees" className="text-2xl font-semibold">9. Fees</h2>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            The Service is currently provided free of charge during the beta period.
+                            Public credential verification is, and is intended to remain, free. We may
+                            introduce fees for issuance or institutional features in future; if we do,
+                            we will give registered users at least 30 days&apos; notice before any
+                            charge applies to them, and no fee will ever be charged without your prior
+                            agreement. Any network (Stellar) transaction fees incurred by your own
+                            wallet are your responsibility.
+                        </p>
+                    </section>
+
+                    <section aria-labelledby="indemnity">
+                        <h2 id="indemnity" className="text-2xl font-semibold">10. Indemnification</h2>
+                        <p className="mt-4 leading-7 text-muted-foreground">
+                            You agree to indemnify and hold harmless Acredia and its operators from any
+                            claim, demand, loss, or expense (including reasonable legal fees) arising
+                            from your misuse of the Service, your breach of these Terms, your
+                            infringement of any third party&apos;s rights, or — for institutions — the
+                            accuracy and lawfulness of the credentials and personal data you choose to
+                            issue through the Service. This clause does not limit any rights you have
+                            as a consumer under applicable mandatory law.
+                        </p>
+                    </section>
+
                     <section aria-labelledby="termination">
-                        <h2 id="termination" className="text-2xl font-semibold">9. Termination</h2>
+                        <h2 id="termination" className="text-2xl font-semibold">11. Termination</h2>
                         <p className="mt-4 leading-7 text-muted-foreground">
                             You may delete your account at any time via Dashboard → Settings → Delete Account.
                             Acredia reserves the right to suspend or terminate accounts that violate these
@@ -126,7 +167,7 @@ export default function TermsOfServicePage() {
                     </section>
 
                     <section aria-labelledby="governing-law">
-                        <h2 id="governing-law" className="text-2xl font-semibold">10. Governing law</h2>
+                        <h2 id="governing-law" className="text-2xl font-semibold">12. Governing law</h2>
                         <p className="mt-4 leading-7 text-muted-foreground">
                             These Terms are governed by the laws of India. Any disputes shall be resolved in
                             the courts of West Bengal, India, unless applicable law requires otherwise.
@@ -134,7 +175,7 @@ export default function TermsOfServicePage() {
                     </section>
 
                     <section aria-labelledby="changes">
-                        <h2 id="changes" className="text-2xl font-semibold">11. Changes to these Terms</h2>
+                        <h2 id="changes" className="text-2xl font-semibold">13. Changes to these Terms</h2>
                         <p className="mt-4 leading-7 text-muted-foreground">
                             We may update these Terms from time to time. We will notify registered users via
                             email at least 14 days before material changes take effect. Continued use after
@@ -143,7 +184,7 @@ export default function TermsOfServicePage() {
                     </section>
 
                     <section aria-labelledby="contact">
-                        <h2 id="contact" className="text-2xl font-semibold">12. Contact</h2>
+                        <h2 id="contact" className="text-2xl font-semibold">14. Contact</h2>
                         <p className="mt-4 leading-7 text-muted-foreground">
                             Questions about these Terms?{' '}
                             <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary underline">

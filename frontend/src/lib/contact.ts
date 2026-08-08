@@ -11,5 +11,12 @@ export const CONTACT_EMAIL = 'acredia.stellar@gmail.com';
 /** `mailto:` href for the primary inbox. */
 export const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}`;
 
-/** Public source repository. */
-export const GITHUB_REPO_URL = 'https://github.com/soumen0818/ACREDIA-STELLAR';
+/**
+ * X / Twitter handle.
+ *
+ * TODO: replace with the real Acredia handle — this is a placeholder and the
+ * link will 404 until it is updated. Change it here and every surface
+ * (contact page, footer) picks it up.
+ */
+export const TWITTER_HANDLE = '@AcrediaStellar';
+export const TWITTER_URL = `https://x.com/${TWITTER_HANDLE.replace('@', '')}`;
