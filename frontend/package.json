@@ -14,11 +14,11 @@
         "test:load": "vitest run tests/load-endpoints.test.ts",
         "lint": "eslint .",
         "format": "prettier --write .",
-        "indexer": "npx tsx scripts/indexer.ts",
+        "indexer": "tsx --env-file=.env.local scripts/indexer.ts",
         "db:backup": "bash scripts/backup-db.sh",
         "db:restore": "bash scripts/restore-db.sh",
-        "email-worker": "npx tsx scripts/emailWorker.ts",
-        "worker:pin-keeper": "tsx worker/pinKeeper.ts",
+        "email-worker": "tsx --env-file=.env.local scripts/emailWorker.ts",
+        "worker:pin-keeper": "tsx --env-file=.env.local worker/pinKeeper.ts",
         "db:schema": "bash scripts/build-schema.sh"
     },
     "dependencies": {

@@ -692,9 +692,19 @@ See `SECRETS_ROTATION.md` for the complete key-rotation runbook and pre-commit/C
 
 1. Visit [Pinata](https://pinata.cloud) and sign up for free (no credit card required)
 2. Go to **API Keys** → **New Key**
-3. Enable `pinFileToIPFS` and `pinJSONToIPFS` permissions
+3. Enable **all four** permissions the app uses — an under-scoped key fails at runtime:
+
+   | Permission | Used by |
+   |---|---|
+   | `pinFileToIPFS` | uploading credential documents |
+   | `pinJSONToIPFS` | uploading credential metadata |
+   | `unpin` | account erasure (GDPR right to erasure) |
+   | `pinList` | pin-keeper health checks / redundancy monitoring |
+
 4. Copy the **JWT** token
 5. Add it to your frontend `.env.local` as `PINATA_JWT=...` so only the server routes can use it.
+   Never name it `NEXT_PUBLIC_PINATA_JWT` — the app refuses to boot if a server secret is
+   exposed to the browser bundle.
 
 > **Free tier**: 1 GB storage, unlimited pins — more than enough for development and testing.
 

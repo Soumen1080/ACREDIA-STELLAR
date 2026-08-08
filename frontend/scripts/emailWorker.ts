@@ -21,6 +21,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const POLL_INTERVAL_MS = 5000;
+// Identifies this process in jobs.locked_by so a stuck job can be traced
+// back to the worker that claimed it.
+const WORKER_ID = `emailWorker@${process.env.HOSTNAME || 'local'}:${process.pid}`;
 
 async function processJob(job: any) {
     structuredLog('INFO', `Processing job ${job.id}`, 'emailWorker', { type: job.name });
@@ -80,7 +83,7 @@ async function runWorker() {
         try {
             // Lock and fetch one job
             const { data: jobs, error: fetchError } = await supabase
-                .rpc('next_job', { queue_name: 'send_email' });
+                .rpc('next_job', { queue_name: 'send_email', worker_id: WORKER_ID });
 
             if (fetchError) {
                 structuredLog('ERROR', 'Error fetching jobs', 'emailWorker', { error: fetchError.message });

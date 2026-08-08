@@ -26,3 +26,4 @@ node_modules/
 
 # Local session context (not for repo)
 CLAUDE.md
+*session*.jsonl
