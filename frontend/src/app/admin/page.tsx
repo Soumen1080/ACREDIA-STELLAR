@@ -1,19 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Activity, CheckCircle2, Shield, Users } from 'lucide-react';
+import {
+    Activity,
+    ArrowRight,
+    Building2,
+    CheckCircle2,
+    RefreshCw,
+    Shield,
+    ShieldAlert,
+    Users,
+} from 'lucide-react';
 import { toast } from 'sonner';
-import { DashboardShell } from '@/components/dashboard/DashboardShell';
-import { AuthorizeIssuer } from '@/components/institution/AuthorizeIssuer';
-import { ConnectWallet } from '@/components/ui/ConnectWallet';
+import { AdminShell } from '@/components/admin/AdminShell';
+import { ConnectWalletNotice } from '@/components/admin/ConnectWalletNotice';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { RouteStateScreen } from '@/components/route-state/RouteStateScreen';
-import { getContractOwner } from '@/lib/contracts';
-import { debugLog, debugWarn, captureException } from '@/lib/debug';
+import { Skeleton } from '@/components/ui/skeleton';
+import { debugLog, captureException } from '@/lib/debug';
+import { adminFetch } from '@/lib/adminApi';
 import { runtimeConfig } from '@/lib/runtimeConfig';
-import { safeGetSession } from '@/lib/supabase';
-import { useStellarAccount } from '@/contexts/StellarContext';
+import { useContractOwner } from '@/hooks/useContractOwner';
 import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
 
 interface AdminStats {
@@ -25,310 +34,289 @@ interface AdminStats {
     verificationActivity: {
         totalAttempts: number;
         attemptsLast24h: number;
-        resultCounts: {
-            verified: number;
-            revoked: number;
-            not_found: number;
-            chain_unavailable: number;
-            mismatch: number;
-            invalid_request: number;
-            server_error: number;
-        };
     };
+}
+
+const EMPTY_STATS: AdminStats = {
+    totalInstitutions: 0,
+    authorizedInstitutions: 0,
+    totalCredentials: 0,
+    activeCredentials: 0,
+    totalStudents: 0,
+    verificationActivity: {
+        totalAttempts: 0,
+        attemptsLast24h: 0,
+    },
+};
+
+const REFRESH_INTERVAL_MS = 30_000;
+
+function StatCard({
+    icon: Icon,
+    iconClassName,
+    label,
+    value,
+    caption,
+    loading,
+}: {
+    icon: typeof Users;
+    iconClassName: string;
+    label: string;
+    value: number;
+    caption: string;
+    loading: boolean;
+}) {
+    return (
+        <Card className="p-5">
+            <div className="flex items-center gap-3">
+                <span
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconClassName}`}
+                >
+                    <Icon className="h-5 w-5" />
+                </span>
+                <h3 className="text-sm font-semibold text-muted-foreground">{label}</h3>
+            </div>
+
+            {/* Only the first load shows a skeleton. Background refreshes replace
+                the number in place so it never blinks out. */}
+            {loading ? (
+                <Skeleton className="mt-4 h-9 w-16" />
+            ) : (
+                <p className="mt-4 text-3xl font-bold tabular-nums text-foreground">{value}</p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">{loading ? ' ' : caption}</p>
+        </Card>
+    );
 }
 
 function AdminDashboardContent() {
     const { user, signOut } = useAuth();
     const router = useRouter();
-    const { address } = useStellarAccount();
-    const [contractOwner, setContractOwner] = useState('');
-    const [isOwner, setIsOwner] = useState(false);
-    const [isChecking, setIsChecking] = useState(true);
-    const [stats, setStats] = useState<AdminStats>({
-        totalInstitutions: 0,
-        authorizedInstitutions: 0,
-        totalCredentials: 0,
-        activeCredentials: 0,
-        totalStudents: 0,
-        verificationActivity: {
-            totalAttempts: 0,
-            attemptsLast24h: 0,
-            resultCounts: {
-                verified: 0,
-                revoked: 0,
-                not_found: 0,
-                chain_unavailable: 0,
-                mismatch: 0,
-                invalid_request: 0,
-                server_error: 0,
-            },
-        },
-    });
+    const { address, isOwner, isChecking, contractOwner } = useContractOwner();
+
+    const [stats, setStats] = useState<AdminStats>(EMPTY_STATS);
     const [loadingStats, setLoadingStats] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    useEffect(() => {
-        const checkOwnership = async () => {
-            if (!address) {
-                setIsChecking(false);
-                return;
-            }
-
-            try {
-                const owner = await getContractOwner(address);
-                const ownerCheck = address.toLowerCase() === owner.toLowerCase();
-
-                setContractOwner(owner);
-                setIsOwner(ownerCheck);
-
-                if (!ownerCheck) {
-                    debugWarn('Connected wallet is not the contract owner.');
-                    toast.error('This wallet is not the contract owner');
-                    toast.info('Connect the wallet that deployed the contracts');
-                } else {
-                    debugLog('Connected wallet verified as contract owner.');
-                    toast.success('Verified as Contract Owner');
-                }
-            } catch (error) {
-                captureException(error, { context: 'checkOwnership' });
-                toast.error('Failed to verify ownership: ' + (error as Error).message);
-            } finally {
-                setIsChecking(false);
-            }
-        };
-
-        checkOwnership();
-    }, [address]);
-
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
+    const fetchStats = useCallback(async (silent = false) => {
+        try {
+            if (silent) {
+                setRefreshing(true);
+            } else {
                 setLoadingStats(true);
-                const {
-                    data: { session },
-                } = await safeGetSession();
-
-                if (!session?.access_token) {
-                    toast.error('Your session expired. Please sign in again.');
-                    setLoadingStats(false);
-                    return;
-                }
-
-                const response = await fetch('/api/admin/stats', {
-                    headers: {
-                        Authorization: `Bearer ${session.access_token}`,
-                    },
-                });
-                const data = await response.json();
-
-                if (data.success) {
-                    setStats(data.stats);
-                    debugLog('Admin statistics loaded.');
-                    return;
-                }
-
-                captureException(new Error(data.error || 'Failed to fetch stats'), { context: 'fetchStats' });
-                toast.error('Failed to load statistics');
-            } catch (error) {
-                captureException(error, { context: 'fetchStats' });
-                toast.error('Failed to load statistics');
-            } finally {
-                setLoadingStats(false);
             }
-        };
 
-        if (!isOwner) {
-            return;
+            const data = await adminFetch<{ stats: AdminStats }>('/api/admin/stats');
+            setStats(data.stats);
+            debugLog('Admin statistics loaded.');
+        } catch (error) {
+            captureException(error, { context: 'fetchStats' });
+            // A failed background poll keeps the last good numbers on screen
+            // instead of nagging every 30 seconds.
+            if (!silent) {
+                toast.error(
+                    error instanceof Error ? error.message : 'Failed to load statistics',
+                );
+            }
+        } finally {
+            setLoadingStats(false);
+            setRefreshing(false);
         }
+    }, []);
+
+    useEffect(() => {
+        if (!isOwner) return;
 
         fetchStats();
-        const interval = setInterval(fetchStats, 30000);
+        const interval = setInterval(() => fetchStats(true), REFRESH_INTERVAL_MS);
         return () => clearInterval(interval);
-    }, [isOwner]);
+    }, [isOwner, fetchStats]);
 
     const handleSignOut = async () => {
         await signOut();
         router.push('/');
     };
 
-    if (isChecking) {
-        return (
-            <RouteStateScreen
-                title="Loading admin"
-                description="Preparing the administration workspace..."
-                variant="loading"
-            />
-        );
-    }
-
-    if (!address) {
-        return (
-            <div className="flex min-h-screen items-center justify-center bg-secondary/30">
-                <Card className="max-w-md p-8">
-                    <Shield className="mx-auto mb-4 h-16 w-16 text-primary" />
-                    <h2 className="mb-4 text-center text-2xl font-bold text-foreground">
-                        Admin Access Required
-                    </h2>
-                    <p className="mb-6 text-center text-muted-foreground">
-                        Please connect your wallet to access the admin dashboard
-                    </p>
-                    <div className="flex justify-center">
-                        <ConnectWallet />
-                    </div>
-                </Card>
-            </div>
-        );
-    }
+    const revokedCredentials = Math.max(stats.totalCredentials - stats.activeCredentials, 0);
 
     return (
-        <DashboardShell
-            title="Admin Dashboard"
-            subtitle="Manage institution authorizations and system settings"
-            icon={<Shield className="h-11 w-11 text-primary" />}
-            brandBadge="ADMIN"
+        <AdminShell
+            title="Overview"
+            subtitle="System statistics and contract status"
             onSignOut={handleSignOut}
+            actions={
+                isOwner ? (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchStats(true)}
+                        disabled={refreshing || loadingStats}
+                    >
+                        <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </Button>
+                ) : undefined
+            }
         >
-            {!isOwner && (
-                <div className="mb-6 rounded-lg border border-warning/25 bg-warning/8 p-4">
-                    <div className="flex items-start space-x-3">
-                        <Shield className="mt-0.5 h-6 w-6 text-warning" />
-                        <div>
-                            <h3 className="mb-1 text-sm font-bold text-foreground">
-                                Read-Only Mode: Not Contract Owner
-                            </h3>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                You are viewing the dashboard, but you cannot authorize new
-                                institutions because your currently connected wallet (
-                                {address.slice(0, 6)}...{address.slice(-4)}) is not the contract
-                                owner.
-                                <br />
-                                Actual Owner:{' '}
-                                <span className="rounded bg-warning/15 px-1 font-mono">
-                                    {contractOwner || 'Could not fetch'}
-                                </span>
-                            </p>
+            {!address ? (
+                <ConnectWalletNotice message="Connect the contract owner wallet to load system statistics and manage issuer authorizations." />
+            ) : (
+                <div className="space-y-6">
+                    {isChecking ? (
+                        <Card className="p-6">
+                            <Skeleton className="h-5 w-56" />
+                            <Skeleton className="mt-4 h-4 w-full max-w-md" />
+                        </Card>
+                    ) : !isOwner ? (
+                        <Card className="border-warning/25 bg-warning/8 p-6">
+                            <div className="flex items-start gap-3">
+                                <ShieldAlert className="mt-0.5 h-6 w-6 shrink-0 text-warning" />
+                                <div className="min-w-0">
+                                    <h3 className="text-sm font-bold text-foreground">
+                                        Read-only mode — not the contract owner
+                                    </h3>
+                                    <p className="mt-1.5 text-sm text-muted-foreground">
+                                        Statistics stay hidden and issuer authorization is disabled
+                                        until you connect the wallet that deployed the contract.
+                                    </p>
+                                    <p className="mt-3 text-xs text-muted-foreground">
+                                        Connected:{' '}
+                                        <span className="break-all font-mono text-foreground">
+                                            {address}
+                                        </span>
+                                    </p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Contract owner:{' '}
+                                        <span className="break-all font-mono text-foreground">
+                                            {contractOwner || 'Could not fetch'}
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        </Card>
+                    ) : null}
+
+                    <Card className="p-6">
+                        <div className="flex items-start gap-3">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/12 text-success">
+                                <CheckCircle2 className="h-5 w-5" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <h3 className="text-base font-semibold text-foreground">
+                                    {isOwner ? 'Contract owner' : 'Signed in as admin'}
+                                </h3>
+                                <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                    <div className="min-w-0">
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            Email
+                                        </dt>
+                                        <dd className="mt-1 truncate text-sm text-foreground">
+                                            {user?.email}
+                                        </dd>
+                                    </div>
+                                    <div className="min-w-0">
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            Wallet address
+                                        </dt>
+                                        <dd className="mt-1 break-all font-mono text-xs text-foreground">
+                                            {address}
+                                        </dd>
+                                    </div>
+                                    <div className="min-w-0">
+                                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                            Contract address
+                                        </dt>
+                                        <dd className="mt-1 break-all font-mono text-xs text-foreground">
+                                            {runtimeConfig.contracts.CREDENTIAL_NFT}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </div>
                         </div>
-                    </div>
+                    </Card>
+
+                    {isOwner && (
+                        <>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                                <StatCard
+                                    icon={Users}
+                                    iconClassName="bg-primary/10 text-primary"
+                                    label="Total institutions"
+                                    value={stats.totalInstitutions}
+                                    caption="Registered institutions"
+                                    loading={loadingStats}
+                                />
+                                <StatCard
+                                    icon={CheckCircle2}
+                                    iconClassName="bg-success/12 text-success"
+                                    label="Authorized"
+                                    value={stats.authorizedInstitutions}
+                                    caption="Authorized to issue"
+                                    loading={loadingStats}
+                                />
+                                <StatCard
+                                    icon={Shield}
+                                    iconClassName="bg-primary/10 text-primary"
+                                    label="Total credentials"
+                                    value={stats.totalCredentials}
+                                    caption={`${stats.activeCredentials} active, ${revokedCredentials} revoked`}
+                                    loading={loadingStats}
+                                />
+                                <StatCard
+                                    icon={Activity}
+                                    iconClassName="bg-gold/12 text-gold"
+                                    label="Verification checks"
+                                    value={stats.verificationActivity.totalAttempts}
+                                    caption={`${stats.verificationActivity.attemptsLast24h} in last 24h`}
+                                    loading={loadingStats}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Link
+                                    href="/admin/institutions"
+                                    className="group rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                                >
+                                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
+                                        <Building2 className="h-5 w-5" />
+                                    </span>
+                                    <h3 className="mt-4 font-semibold text-foreground">
+                                        Institutions
+                                    </h3>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Browse every registered institution and inspect the
+                                        credentials it has issued.
+                                    </p>
+                                    <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                                        View institutions
+                                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                                    </span>
+                                </Link>
+
+                                <Link
+                                    href="/admin/authorize"
+                                    className="group rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                                >
+                                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gold/12 text-gold transition-transform group-hover:scale-105">
+                                        <Shield className="h-5 w-5" />
+                                    </span>
+                                    <h3 className="mt-4 font-semibold text-foreground">
+                                        Authorize issuer
+                                    </h3>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        Grant a wallet permission to issue credentials on-chain.
+                                    </p>
+                                    <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                                        Open authorization
+                                        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                                    </span>
+                                </Link>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
-
-            <Card className="mb-6 p-6">
-                <div className="flex items-start space-x-4">
-                    <CheckCircle2 className="mt-1 h-6 w-6 text-success" />
-                    <div className="flex-1">
-                        <h3 className="mb-2 text-lg font-bold text-foreground">
-                            Contract Owner (Admin)
-                        </h3>
-                        <div className="space-y-2">
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground">Email:</p>
-                                <p className="text-sm text-foreground">{user?.email}</p>
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground">Wallet Address:</p>
-                                <p className="break-all text-xs font-mono text-foreground">
-                                    {address}
-                                </p>
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground">
-                                    Contract Address:
-                                </p>
-                                <p className="break-all text-xs font-mono text-foreground">
-                                    {runtimeConfig.contracts.CREDENTIAL_NFT}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </Card>
-
-            <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-                <Card className="p-6">
-                    <div className="mb-2 flex items-center space-x-3">
-                        <Users className="h-11 w-11 text-primary" />
-                        <h3 className="text-lg font-semibold text-foreground">Total Institutions</h3>
-                    </div>
-                    {loadingStats ? (
-                        <div className="animate-pulse">
-                            <div className="mb-2 h-10 w-16 rounded bg-secondary"></div>
-                        </div>
-                    ) : (
-                        <>
-                            <p className="text-3xl font-bold text-foreground">
-                                {stats.totalInstitutions}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground">Registered institutions</p>
-                        </>
-                    )}
-                </Card>
-
-                <Card className="p-6">
-                    <div className="mb-2 flex items-center space-x-3">
-                        <CheckCircle2 className="h-11 w-11 text-success" />
-                        <h3 className="text-lg font-semibold text-foreground">Authorized</h3>
-                    </div>
-                    {loadingStats ? (
-                        <div className="animate-pulse">
-                            <div className="mb-2 h-10 w-16 rounded bg-secondary"></div>
-                        </div>
-                    ) : (
-                        <>
-                            <p className="text-3xl font-bold text-foreground">
-                                {stats.authorizedInstitutions}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground">Authorized to issue</p>
-                        </>
-                    )}
-                </Card>
-
-                <Card className="p-6">
-                    <div className="mb-2 flex items-center space-x-3">
-                        <Shield className="h-11 w-11 text-primary" />
-                        <h3 className="text-lg font-semibold text-foreground">Total Credentials</h3>
-                    </div>
-                    {loadingStats ? (
-                        <div className="animate-pulse">
-                            <div className="mb-2 h-10 w-16 rounded bg-secondary"></div>
-                        </div>
-                    ) : (
-                        <>
-                            <p className="text-3xl font-bold text-foreground">
-                                {stats.totalCredentials}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                {stats.activeCredentials} active,{' '}
-                                {stats.totalCredentials - stats.activeCredentials} revoked
-                            </p>
-                        </>
-                    )}
-                </Card>
-
-                <Card className="p-6">
-                    <div className="mb-2 flex items-center space-x-3">
-                        <Activity className="h-8 w-8 text-gold" />
-                        <h3 className="text-lg font-semibold text-foreground">
-                            Verification Checks
-                        </h3>
-                    </div>
-                    {loadingStats ? (
-                        <div className="animate-pulse">
-                            <div className="mb-2 h-10 w-16 rounded bg-secondary"></div>
-                        </div>
-                    ) : (
-                        <>
-                            <p className="text-3xl font-bold text-foreground">
-                                {stats.verificationActivity.totalAttempts}
-                            </p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                {stats.verificationActivity.attemptsLast24h} in last 24h
-                            </p>
-                        </>
-                    )}
-                </Card>
-            </div>
-
-            <AuthorizeIssuer />
-        </DashboardShell>
+        </AdminShell>
     );
 }
 

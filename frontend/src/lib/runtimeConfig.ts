@@ -92,8 +92,70 @@ const PUBLIC_SECRET_ENV_NAMES = [
     'NEXT_PUBLIC_STELLAR_SECRET_SEED',
 ] as const;
 
+/**
+ * Statically-referenced `NEXT_PUBLIC_*` values.
+ *
+ * Next.js replaces client-side environment variables at build time, but only
+ * where they appear as literal `process.env.NEXT_PUBLIC_X` expressions. A
+ * dynamic `process.env[name]` lookup is left untouched by the bundler, so in
+ * the browser it resolves against an empty object and yields `undefined` for
+ * every key — which silently collapsed the whole public config (the Supabase
+ * client then fell back to `placeholder.supabase.co` and every request failed
+ * with a DNS error).
+ *
+ * Listing the names here keeps `readEnv(name)` ergonomic while guaranteeing
+ * each value is inlined. Server-only variables are intentionally absent: they
+ * must never reach the browser, and on the server the dynamic lookup works.
+ */
+function readRawEnv(name: string): string | undefined {
+    switch (name) {
+        case 'NEXT_PUBLIC_SUPABASE_URL':
+            return process.env.NEXT_PUBLIC_SUPABASE_URL;
+        case 'NEXT_PUBLIC_SUPABASE_ANON_KEY':
+            return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        case 'NEXT_PUBLIC_STELLAR_NETWORK':
+            return process.env.NEXT_PUBLIC_STELLAR_NETWORK;
+        case 'NEXT_PUBLIC_CHAIN_ID':
+            return process.env.NEXT_PUBLIC_CHAIN_ID;
+        case 'NEXT_PUBLIC_NETWORK_NAME':
+            return process.env.NEXT_PUBLIC_NETWORK_NAME;
+        case 'NEXT_PUBLIC_NETWORK_PASSPHRASE':
+            return process.env.NEXT_PUBLIC_NETWORK_PASSPHRASE;
+        case 'NEXT_PUBLIC_HORIZON_URL':
+            return process.env.NEXT_PUBLIC_HORIZON_URL;
+        case 'NEXT_PUBLIC_SOROBAN_RPC_URL':
+            return process.env.NEXT_PUBLIC_SOROBAN_RPC_URL;
+        case 'NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL':
+            return process.env.NEXT_PUBLIC_STELLAR_EXPLORER_BASE_URL;
+        case 'NEXT_PUBLIC_CREDENTIAL_NFT_CONTRACT':
+            return process.env.NEXT_PUBLIC_CREDENTIAL_NFT_CONTRACT;
+        case 'NEXT_PUBLIC_CREDENTIAL_REGISTRY_CONTRACT':
+            return process.env.NEXT_PUBLIC_CREDENTIAL_REGISTRY_CONTRACT;
+        case 'NEXT_PUBLIC_PINATA_GATEWAY':
+            return process.env.NEXT_PUBLIC_PINATA_GATEWAY;
+        case 'NEXT_PUBLIC_ENABLE_DEBUG_LOGS':
+            return process.env.NEXT_PUBLIC_ENABLE_DEBUG_LOGS;
+        // Listed so the "secret exposed to the browser" guard can observe these
+        // client-side, not just on the server.
+        case 'NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY':
+            return process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+        case 'NEXT_PUBLIC_PINATA_JWT':
+            return process.env.NEXT_PUBLIC_PINATA_JWT;
+        case 'NEXT_PUBLIC_VERIFICATION_LOG_HASH_SECRET':
+            return process.env.NEXT_PUBLIC_VERIFICATION_LOG_HASH_SECRET;
+        case 'NEXT_PUBLIC_STELLAR_SECRET_KEY':
+            return process.env.NEXT_PUBLIC_STELLAR_SECRET_KEY;
+        case 'NEXT_PUBLIC_STELLAR_SECRET_SEED':
+            return process.env.NEXT_PUBLIC_STELLAR_SECRET_SEED;
+        // Server-only variables: the dynamic lookup is correct here, because
+        // these must never be inlined into the browser bundle.
+        default:
+            return process.env[name];
+    }
+}
+
 function readEnv(name: string): string | undefined {
-    const value = process.env[name]?.trim();
+    const value = readRawEnv(name)?.trim();
     return value ? value : undefined;
 }
 

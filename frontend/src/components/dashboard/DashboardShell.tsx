@@ -13,6 +13,11 @@ interface DashboardTopbarProps {
     brandBadge?: string;
     brandBadgeClassName?: string;
     onSignOut: () => void;
+    /**
+     * Hides the wallet / settings / sign-out cluster from the top bar so a page
+     * can present those actions inline in its own content instead.
+     */
+    hideTopbarActions?: boolean;
 }
 
 interface DashboardPageHeaderProps {
@@ -31,6 +36,7 @@ export function DashboardTopbar({
     brandBadge,
     brandBadgeClassName,
     onSignOut,
+    hideTopbarActions,
 }: DashboardTopbarProps) {
     return (
         <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur-xl">
@@ -65,30 +71,32 @@ export function DashboardTopbar({
                     )}
                 </Link>
 
-                <div className="flex items-center gap-2 sm:gap-3">
-                    <ConnectWallet />
-                    <Button
-                        asChild
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-foreground"
-                        aria-label="Account settings"
-                    >
-                        <Link href="/dashboard/settings">
-                            <Settings className="h-4 w-4" />
-                            <span className="hidden sm:inline">Settings</span>
-                        </Link>
-                    </Button>
-                    <Button
-                        onClick={onSignOut}
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive"
-                    >
-                        <LogOut className="h-4 w-4" />
-                        <span className="hidden sm:inline">Sign out</span>
-                    </Button>
-                </div>
+                {!hideTopbarActions && (
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        <ConnectWallet />
+                        <Button
+                            asChild
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label="Account settings"
+                        >
+                            <Link href="/dashboard/settings">
+                                <Settings className="h-4 w-4" />
+                                <span className="hidden sm:inline">Settings</span>
+                            </Link>
+                        </Button>
+                        <Button
+                            onClick={onSignOut}
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-destructive"
+                        >
+                            <LogOut className="h-4 w-4" />
+                            <span className="hidden sm:inline">Sign out</span>
+                        </Button>
+                    </div>
+                )}
             </div>
         </header>
     );
@@ -123,6 +131,7 @@ export function DashboardShell({
     brandBadge,
     brandBadgeClassName,
     onSignOut,
+    hideTopbarActions,
 }: DashboardShellProps) {
     return (
         <div className="min-h-screen bg-secondary/30">
@@ -130,6 +139,7 @@ export function DashboardShell({
                 brandBadge={brandBadge}
                 brandBadgeClassName={brandBadgeClassName}
                 onSignOut={onSignOut}
+                hideTopbarActions={hideTopbarActions}
             />
             <main className={cn('container-shell py-8 sm:py-10', contentClassName)}>
                 <DashboardPageHeader

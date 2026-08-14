@@ -3,7 +3,18 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, BarChart2, FileSpreadsheet, List, Shield, Upload, User, Wallet } from 'lucide-react';
+import {
+    ArrowRight,
+    BarChart2,
+    Building2,
+    FileSpreadsheet,
+    List,
+    LogOut,
+    Settings,
+    Shield,
+    Upload,
+    Wallet,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { CredentialUploadForm } from '@/components/institution/CredentialUploadForm';
@@ -11,7 +22,9 @@ import { BatchCredentialImport } from '@/components/institution/BatchCredentialI
 import { InstitutionAnalytics } from '@/components/institution/InstitutionAnalytics';
 import { IssuedCredentialsList } from '@/components/institution/IssuedCredentialsList';
 import StudentCredentialsList from '@/components/student/StudentCredentialsList';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ConnectWallet } from '@/components/ui/ConnectWallet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { debugLog, debugWarn, captureException } from '@/lib/debug';
@@ -218,12 +231,21 @@ function DashboardContent() {
 
     return (
         <DashboardShell
-            title={<>Welcome, {user?.user_metadata?.name || 'User'}</>}
+            title={
+                <>
+                    Welcome,{' '}
+                    {user?.user_metadata?.name ||
+                        (userRole === 'admin' ? 'Admin' : 'User')}
+                </>
+            }
             subtitle={<span className="capitalize">{userRole} dashboard</span>}
             brandBadge={
                 userRole && userRole !== 'loading' ? String(userRole).toUpperCase() : undefined
             }
             onSignOut={handleSignOut}
+            // Admins get their account actions inline below, keeping the top bar
+            // clean before they move into the sidebar-driven admin console.
+            hideTopbarActions={userRole === 'admin'}
         >
             {userRole === 'institution' && (
                 <div className="space-y-6">
@@ -355,59 +377,88 @@ function DashboardContent() {
 
             {userRole === 'admin' && (
                 <div className="space-y-6">
-                    <Card className="p-8">
-                        <div className="flex items-center gap-4">
-                            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                                <Shield className="h-7 w-7" />
-                            </span>
-                            <div>
-                                <h2 className="text-xl font-bold text-foreground">
-                                    You&apos;re an admin
+                    {/* Account actions live here rather than in the top bar, so the
+                        landing screen carries everything the admin needs. */}
+                    <Card className="p-6">
+                        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                                <h2 className="text-base font-semibold text-foreground">
+                                    Account
                                 </h2>
-                                <p className="text-sm text-muted-foreground">
-                                    Access the admin panel to manage institutions and authorize
-                                    issuers.
+                                <p className="mt-1 truncate text-sm text-muted-foreground">
+                                    {user?.email}
                                 </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <ConnectWallet />
+                                <Button asChild variant="outline" size="sm">
+                                    <Link href="/dashboard/settings">
+                                        <Settings className="h-4 w-4" />
+                                        Settings
+                                    </Link>
+                                </Button>
+                                <Button
+                                    onClick={handleSignOut}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-muted-foreground hover:text-destructive"
+                                >
+                                    <LogOut className="h-4 w-4" />
+                                    Sign out
+                                </Button>
                             </div>
                         </div>
-                        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                            <Link
-                                href="/admin"
-                                className="group block rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2"
-                            >
-                                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
-                                    <Shield className="h-6 w-6" />
-                                </span>
-                                <h3 className="mt-4 font-semibold text-foreground">Admin dashboard</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    Authorize institutions, view system stats, and manage the
-                                    contract.
-                                </p>
-                                <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                                    Open admin panel
-                                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                                </span>
-                            </Link>
-                            <div className="rounded-xl border border-border bg-card p-6">
-                                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gold/12 text-gold">
-                                    <User className="h-6 w-6" />
-                                </span>
-                                <h3 className="mt-4 font-semibold text-foreground">
-                                    Connected wallet
-                                </h3>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    Your Stellar address:
-                                </p>
-                                <p className="mt-2 break-all font-mono text-xs text-foreground">
-                                    {address || (
-                                        <span className="text-warning">
-                                            Not connected — click “Connect Wallet” above
-                                        </span>
-                                    )}
-                                </p>
-                            </div>
+
+                        <div className="mt-5 border-t border-border pt-5">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                Connected wallet
+                            </p>
+                            <p className="mt-1.5 break-all font-mono text-xs text-foreground">
+                                {address || (
+                                    <span className="font-sans text-warning">
+                                        Not connected — use “Connect Wallet” above
+                                    </span>
+                                )}
+                            </p>
                         </div>
                     </Card>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <Link
+                            href="/admin"
+                            className="group block rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2"
+                        >
+                            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
+                                <Shield className="h-6 w-6" />
+                            </span>
+                            <h3 className="mt-4 font-semibold text-foreground">Admin console</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                System statistics, contract status, and issuer authorization.
+                            </p>
+                            <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                                Open admin console
+                                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </span>
+                        </Link>
+
+                        <Link
+                            href="/admin/institutions"
+                            className="group block rounded-xl border border-border bg-card p-6 transition-all hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2"
+                        >
+                            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gold/12 text-gold transition-transform group-hover:scale-105">
+                                <Building2 className="h-6 w-6" />
+                            </span>
+                            <h3 className="mt-4 font-semibold text-foreground">Institutions</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Review registered institutions and the credentials they have
+                                issued.
+                            </p>
+                            <span className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+                                View institutions
+                                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </span>
+                        </Link>
+                    </div>
                 </div>
             )}
 
