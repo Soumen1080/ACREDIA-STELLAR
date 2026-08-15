@@ -93,7 +93,18 @@ test('authorizes an issuer from the admin dashboard', async ({ page }) => {
     await installE2eRoutes(page);
 
     await page.goto('/admin');
-    await expect(page.getByRole('heading', { name: 'Admin Dashboard' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
+
+    // Issuer authorization now lives on its own page. Reach it through the
+    // sidebar rather than a direct goto, so the admin navigation stays covered.
+    await page
+        .getByRole('navigation', { name: 'Admin navigation' })
+        .getByRole('link', { name: /Authorize issuer/ })
+        .click();
+
+    await expect(page).toHaveURL(/\/admin\/authorize$/);
+    await expect(page.getByRole('heading', { name: 'Authorize issuer', level: 1 })).toBeVisible();
+
     await page.getByLabel('Wallet Address to Authorize').fill(issuerWallet);
     await page.getByRole('button', { name: 'Authorize Wallet' }).click();
     await expect(page.getByText('Authorized to issue credentials', { exact: true })).toBeVisible();
