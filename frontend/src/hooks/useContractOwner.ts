@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { getContractOwner } from '@/lib/contracts';
 import { debugLog, debugWarn, captureException } from '@/lib/debug';
@@ -24,15 +24,19 @@ interface ContractOwnerState {
  * against the contract itself rather than any database field, so a compromised
  * app-level admin account still cannot authorize issuers.
  *
- * Toasts fire once per connected address: without this guard, remounting an
- * admin page — or navigating between them — re-announced the same result.
+ * A successful check is deliberately silent — every admin page already shows
+ * owner status in the page itself, so a toast on each visit was pure noise.
+ * Only a *failed* check warns, and only once per address: the tracking lives at
+ * module scope rather than in a ref because navigating between admin pages
+ * unmounts the hook, which would reset a ref and re-fire the warning.
  */
+let warnedForAddress: string | null = null;
+
 export function useContractOwner(): ContractOwnerState {
     const { address } = useStellarAccount();
     const [contractOwner, setContractOwner] = useState('');
     const [isOwner, setIsOwner] = useState(false);
     const [isChecking, setIsChecking] = useState(true);
-    const announcedFor = useRef<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -55,14 +59,14 @@ export function useContractOwner(): ContractOwnerState {
                 setContractOwner(owner);
                 setIsOwner(ownerCheck);
 
-                if (announcedFor.current !== address) {
-                    announcedFor.current = address;
-
-                    if (ownerCheck) {
-                        debugLog('Connected wallet verified as contract owner.');
-                        toast.success('Verified as contract owner');
-                    } else {
-                        debugWarn('Connected wallet is not the contract owner.');
+                if (ownerCheck) {
+                    debugLog('Connected wallet verified as contract owner.');
+                    // No toast: the page itself already shows owner status.
+                    warnedForAddress = null;
+                } else {
+                    debugWarn('Connected wallet is not the contract owner.');
+                    if (warnedForAddress !== address) {
+                        warnedForAddress = address;
                         toast.error('This wallet is not the contract owner');
                     }
                 }

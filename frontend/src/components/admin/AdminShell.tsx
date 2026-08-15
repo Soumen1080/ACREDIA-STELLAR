@@ -45,15 +45,21 @@ const ADMIN_NAV: AdminNavItem[] = [
         description: 'Grant issuing rights',
     },
     {
+        // Stays inside the admin console — sending admins to /dashboard/settings
+        // dropped them out of the sidebar layout entirely.
         label: 'Settings',
-        href: '/dashboard/settings',
+        href: '/admin/settings',
         icon: Settings,
         description: 'Account settings',
     },
 ];
 
 interface AdminShellProps {
-    title: ReactNode;
+    /**
+     * Page heading. Omit it when the sidebar already names the page and a
+     * heading would only repeat it.
+     */
+    title?: ReactNode;
     subtitle?: ReactNode;
     /** Rendered on the right of the page header — filters, refresh, etc. */
     actions?: ReactNode;
@@ -152,7 +158,7 @@ function SidebarContent({ onNavigate, onSignOut }: { onNavigate?: () => void; on
                     onClick={onSignOut}
                     variant="ghost"
                     size="sm"
-                    className="w-full justify-start text-muted-foreground hover:text-destructive"
+                    className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
                     <LogOut className="h-4 w-4" />
                     Sign out
@@ -243,17 +249,25 @@ export function AdminShell({ title, subtitle, actions, children, onSignOut }: Ad
                 </header>
 
                 <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-                    <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                                {title}
-                            </h1>
-                            {subtitle && (
-                                <p className="mt-1.5 text-muted-foreground">{subtitle}</p>
+                    {(title || actions) && (
+                        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            {title && (
+                                <div className="min-w-0">
+                                    <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                                        {title}
+                                    </h1>
+                                    {subtitle && (
+                                        <p className="mt-1.5 text-muted-foreground">{subtitle}</p>
+                                    )}
+                                </div>
+                            )}
+                            {actions && (
+                                <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+                                    {actions}
+                                </div>
                             )}
                         </div>
-                        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-                    </div>
+                    )}
                     {children}
                 </main>
             </div>
