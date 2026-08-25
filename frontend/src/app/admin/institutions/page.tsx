@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { ArrowRight, Building2, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { AdminShell } from '@/components/admin/AdminShell';
+import { ConsoleShell } from '@/components/console/ConsoleShell';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,7 +17,8 @@ import {
     statusBadgeClass,
     type AdminInstitutionSummary,
 } from '@/lib/adminApi';
-import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
+import { CONSOLE_NAV } from '@/lib/consoleNav';
+import { ProtectedRoute } from '@/contexts/AuthContext';
 
 function StatusBadge({ status }: { status: string }) {
     return (
@@ -31,8 +31,6 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function InstitutionsContent() {
-    const { signOut } = useAuth();
-    const router = useRouter();
     const [institutions, setInstitutions] = useState<AdminInstitutionSummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -80,16 +78,11 @@ function InstitutionsContent() {
         );
     }, [institutions, query]);
 
-    const handleSignOut = async () => {
-        await signOut();
-        router.push('/');
-    };
-
     return (
-        <AdminShell
+        <ConsoleShell
+            nav={CONSOLE_NAV.admin}
             title="Institutions"
             subtitle="Every organisation registered on Acredia"
-            onSignOut={handleSignOut}
             actions={
                 <Button
                     variant="outline"
@@ -247,7 +240,7 @@ function InstitutionsContent() {
                     </div>
                 </>
             )}
-        </AdminShell>
+        </ConsoleShell>
     );
 }
 

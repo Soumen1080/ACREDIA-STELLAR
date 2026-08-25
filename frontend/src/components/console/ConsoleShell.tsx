@@ -1,60 +1,24 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import {
-    Building2,
-    LayoutDashboard,
-    LogOut,
-    Menu,
-    Settings,
-    ShieldCheck,
-    X,
-} from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { LogOut, Menu, X } from 'lucide-react';
 import { ConnectWallet } from '@/components/ui/ConnectWallet';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { activeNetwork } from '@/lib/stellar';
+import { isConsoleNavItemActive, type ConsoleNav } from '@/lib/consoleNav';
+import { useAuth } from '@/contexts/AuthContext';
 
-interface AdminNavItem {
-    label: string;
-    href: string;
-    icon: typeof LayoutDashboard;
-    description: string;
-}
-
-const ADMIN_NAV: AdminNavItem[] = [
-    {
-        label: 'Overview',
-        href: '/admin',
-        icon: LayoutDashboard,
-        description: 'System statistics',
-    },
-    {
-        label: 'Institutions',
-        href: '/admin/institutions',
-        icon: Building2,
-        description: 'Registered issuers',
-    },
-    {
-        label: 'Authorize issuer',
-        href: '/admin/authorize',
-        icon: ShieldCheck,
-        description: 'Grant issuing rights',
-    },
-    {
-        // Stays inside the admin console — sending admins to /dashboard/settings
-        // dropped them out of the sidebar layout entirely.
-        label: 'Settings',
-        href: '/admin/settings',
-        icon: Settings,
-        description: 'Account settings',
-    },
-];
-
-interface AdminShellProps {
+interface ConsoleShellProps {
+    /**
+     * Sidebar definition for the signed-in role — items, badge, and the
+     * accessible name of the nav landmark. Pass one of the maps from
+     * `@/lib/consoleNav` rather than hardcoding links here.
+     */
+    nav: ConsoleNav;
     /**
      * Page heading. Omit it when the sidebar already names the page and a
      * heading would only repeat it.
@@ -64,19 +28,27 @@ interface AdminShellProps {
     /** Rendered on the right of the page header — filters, refresh, etc. */
     actions?: ReactNode;
     children: ReactNode;
+    /** Overrides the default "sign out, then go home" behaviour. */
+    onSignOut?: () => void;
+}
+
+function BrandBadge({ label }: { label: string }) {
+    return (
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+            {label}
+        </span>
+    );
+}
+
+function SidebarContent({
+    nav,
+    onNavigate,
+    onSignOut,
+}: {
+    nav: ConsoleNav;
+    onNavigate?: () => void;
     onSignOut: () => void;
-}
-
-function isActivePath(pathname: string, href: string): boolean {
-    // `/admin` must not light up for `/admin/institutions`, but
-    // `/admin/institutions` should stay active on its detail pages.
-    if (href === '/admin') {
-        return pathname === '/admin';
-    }
-    return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function SidebarContent({ onNavigate, onSignOut }: { onNavigate?: () => void; onSignOut: () => void }) {
+}) {
     const pathname = usePathname();
 
     return (
@@ -99,15 +71,13 @@ function SidebarContent({ onNavigate, onSignOut }: { onNavigate?: () => void; on
                         Acredia
                     </span>
                 </Link>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                    Admin
-                </span>
+                <BrandBadge label={nav.badge} />
             </div>
 
-            <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Admin navigation">
-                {ADMIN_NAV.map((item) => {
+            <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label={nav.navLabel}>
+                {nav.items.map((item) => {
                     const Icon = item.icon;
-                    const active = isActivePath(pathname, item.href);
+                    const active = isConsoleNavItemActive(pathname, item);
 
                     return (
                         <Link
@@ -168,9 +138,37 @@ function SidebarContent({ onNavigate, onSignOut }: { onNavigate?: () => void; on
     );
 }
 
-export function AdminShell({ title, subtitle, actions, children, onSignOut }: AdminShellProps) {
+/**
+ * The one console layout shared by the admin, institution, and student
+ * consoles: a fixed sidebar on desktop, a drawer on mobile, and account
+ * actions pinned to the sidebar footer.
+ *
+ * Everything role-specific arrives through the `nav` prop, so this component
+ * never needs to know which role is signed in.
+ */
+export function ConsoleShell({
+    nav,
+    title,
+    subtitle,
+    actions,
+    children,
+    onSignOut,
+}: ConsoleShellProps) {
     const pathname = usePathname();
+    const router = useRouter();
+    const { signOut } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
+
+    // Every console signs out the same way; pages only pass `onSignOut` when
+    // they need something other than "sign out, then go home".
+    const handleSignOut = useCallback(async () => {
+        if (onSignOut) {
+            onSignOut();
+            return;
+        }
+        await signOut();
+        router.push('/');
+    }, [onSignOut, router, signOut]);
 
     // Close the drawer on navigation so the new page is not hidden behind it.
     useEffect(() => {
@@ -200,7 +198,7 @@ export function AdminShell({ title, subtitle, actions, children, onSignOut }: Ad
         <div className="min-h-screen bg-secondary/30">
             {/* Desktop sidebar */}
             <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-border bg-background lg:block">
-                <SidebarContent onSignOut={onSignOut} />
+                <SidebarContent nav={nav} onSignOut={handleSignOut} />
             </aside>
 
             {/* Mobile drawer */}
@@ -214,7 +212,8 @@ export function AdminShell({ title, subtitle, actions, children, onSignOut }: Ad
                     />
                     <aside className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-border bg-background shadow-xl">
                         <SidebarContent
-                            onSignOut={onSignOut}
+                            nav={nav}
+                            onSignOut={handleSignOut}
                             onNavigate={() => setMobileOpen(false)}
                         />
                     </aside>
@@ -243,9 +242,7 @@ export function AdminShell({ title, subtitle, actions, children, onSignOut }: Ad
                     <span className="text-base font-bold tracking-tight text-foreground">
                         Acredia
                     </span>
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                        Admin
-                    </span>
+                    <BrandBadge label={nav.badge} />
                 </header>
 
                 <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">

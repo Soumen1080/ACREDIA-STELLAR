@@ -1,30 +1,23 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { ShieldAlert } from 'lucide-react';
-import { AdminShell } from '@/components/admin/AdminShell';
+import { ConsoleShell } from '@/components/console/ConsoleShell';
 import { ConnectWalletNotice } from '@/components/admin/ConnectWalletNotice';
 import { AuthorizeIssuer } from '@/components/institution/AuthorizeIssuer';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useContractOwner } from '@/hooks/useContractOwner';
-import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
+import { CONSOLE_NAV } from '@/lib/consoleNav';
+import { ProtectedRoute } from '@/contexts/AuthContext';
 
 function AuthorizeContent() {
-    const { signOut } = useAuth();
-    const router = useRouter();
     const { address, isOwner, isChecking, contractOwner } = useContractOwner();
 
-    const handleSignOut = async () => {
-        await signOut();
-        router.push('/');
-    };
-
     return (
-        <AdminShell
+        <ConsoleShell
+            nav={CONSOLE_NAV.admin}
             title="Authorize issuer"
             subtitle="Grant a wallet permission to issue credentials on-chain"
-            onSignOut={handleSignOut}
         >
             {!address ? (
                 <ConnectWalletNotice message="Authorizing an issuer is an on-chain action signed by the contract owner wallet. Connect that wallet to continue." />
@@ -63,7 +56,7 @@ function AuthorizeContent() {
             ) : (
                 <AuthorizeIssuer />
             )}
-        </AdminShell>
+        </ConsoleShell>
     );
 }
 

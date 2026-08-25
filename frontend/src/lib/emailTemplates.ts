@@ -68,7 +68,7 @@ export function buildInstitutionVerifiedEmail(institutionName: string, userId: s
         <p class="text">Hi there,</p>
         <p class="text">Great news! <strong>${institutionName}</strong> has been successfully verified by the Acredia administrators.</p>
         <p class="text">Your account is now fully active. You can link your institution's Stellar wallet and begin issuing verifiable credentials to your students.</p>
-        <a href="${appUrl}/dashboard/institution" class="button">Go to Dashboard</a>
+        <a href="${appUrl}/dashboard/issue" class="button">Go to Dashboard</a>
     `;
     return getBaseTemplate('Institution Verified', 'Your institution has been approved.', content, userId);
 }

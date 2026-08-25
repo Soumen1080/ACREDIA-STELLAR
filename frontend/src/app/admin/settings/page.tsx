@@ -1,9 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { AdminShell } from '@/components/admin/AdminShell';
+import { ConsoleShell } from '@/components/console/ConsoleShell';
 import { AccountSettingsPanels } from '@/components/settings/AccountSettingsPanels';
-import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
+import { CONSOLE_NAV } from '@/lib/consoleNav';
+import { ProtectedRoute } from '@/contexts/AuthContext';
 
 /**
  * Admin account settings — /admin/settings
@@ -13,26 +13,12 @@ import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
  * already marks "Settings" as the current page, so a heading would only repeat
  * it.
  */
-function AdminSettingsContent() {
-    const { signOut } = useAuth();
-    const router = useRouter();
-
-    const handleSignOut = async () => {
-        await signOut();
-        router.push('/');
-    };
-
-    return (
-        <AdminShell onSignOut={handleSignOut}>
-            <AccountSettingsPanels />
-        </AdminShell>
-    );
-}
-
 export default function AdminSettingsPage() {
     return (
         <ProtectedRoute allowedRoles={['admin']}>
-            <AdminSettingsContent />
+            <ConsoleShell nav={CONSOLE_NAV.admin}>
+                <AccountSettingsPanels />
+            </ConsoleShell>
         </ProtectedRoute>
     );
 }

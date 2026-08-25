@@ -217,7 +217,7 @@ rather than recomputing a hash from the downloaded VC.
 
 ## 7. Exporting from the app
 
-- **Student dashboard** (`/dashboard`, "My Credentials"): every credential
+- **Student console** (`/dashboard/credentials`, "My credentials"): every credential
   card has a **"Download VC (.json)"** button.
 - **Public showcase page** (`/credentials/{token}`): a
   **"Download Verifiable Credential (.json)"** button, built only from data

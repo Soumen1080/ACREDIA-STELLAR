@@ -79,6 +79,16 @@ test('core pages pass WCAG 2.1 AA accessibility audit', async ({ page }) => {
     results = await runAxe(page);
     expect(results.violations, `Dashboard page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
 
+    // The former institution tabs are real routes now, so each one is audited
+    // in its own right.
+    await page.goto('/dashboard/issue');
+    results = await runAxe(page);
+    expect(results.violations, `Issue credential page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
+    await page.goto('/dashboard/issued');
+    results = await runAxe(page);
+    expect(results.violations, `Issued credentials page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
     await page.goto('/verify?token=1');
     results = await runAxe(page);
     expect(results.violations, `Verify page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
