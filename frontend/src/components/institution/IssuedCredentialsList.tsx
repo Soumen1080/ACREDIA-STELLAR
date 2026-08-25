@@ -226,8 +226,9 @@ const res = await fetch(`/api/institution/credentials?${params}`, {
 
     return (
         <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-foreground">Issued Credentials</h2>
+            {/* The page heading now lives in the console shell, so this card
+                only carries its own actions. */}
+            <div className="flex items-center justify-end mb-6">
                 <Button onClick={loadCredentials} variant="outline" size="sm" className="border-border text-foreground hover:bg-secondary">
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Refresh
@@ -250,9 +251,12 @@ const res = await fetch(`/api/institution/credentials?${params}`, {
                         className="pl-9"
                     />
                 </div>
+                {/* These controls carry no visible label, so each needs an
+                    explicit accessible name (WCAG 2.1 AA, 4.1.2). */}
                 <select
                     value={status}
                     onChange={e => updateParams({ status: e.target.value })}
+                    aria-label="Filter by status"
                     className="border border-border rounded-md px-3 py-2 text-sm bg-card text-foreground"
                 >
                     <option value="all">All statuses</option>
@@ -263,12 +267,14 @@ const res = await fetch(`/api/institution/credentials?${params}`, {
                     type="date"
                     value={dateFrom}
                     onChange={e => updateParams({ dateFrom: e.target.value })}
+                    aria-label="Issued on or after"
                     className="border border-border rounded-md px-3 py-2 text-sm"
                 />
                 <input
                     type="date"
                     value={dateTo}
                     onChange={e => updateParams({ dateTo: e.target.value })}
+                    aria-label="Issued on or before"
                     className="border border-border rounded-md px-3 py-2 text-sm"
                 />
                 {(search || status !== 'all' || dateFrom || dateTo) && (

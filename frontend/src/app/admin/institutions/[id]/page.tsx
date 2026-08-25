@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { ArrowLeft, Building2, FileText, Mail, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
-import { AdminShell } from '@/components/admin/AdminShell';
+import { ConsoleShell } from '@/components/console/ConsoleShell';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,7 +17,8 @@ import {
     type AdminInstitutionCredential,
     type AdminInstitutionSummary,
 } from '@/lib/adminApi';
-import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
+import { CONSOLE_NAV } from '@/lib/consoleNav';
+import { ProtectedRoute } from '@/contexts/AuthContext';
 
 interface DetailResponse {
     institution: AdminInstitutionSummary;
@@ -49,8 +50,6 @@ function DetailRow({
 }
 
 function InstitutionDetailContent() {
-    const { signOut } = useAuth();
-    const router = useRouter();
     const params = useParams<{ id: string }>();
     const institutionId = params?.id;
 
@@ -82,18 +81,13 @@ function InstitutionDetailContent() {
         load();
     }, [load]);
 
-    const handleSignOut = async () => {
-        await signOut();
-        router.push('/');
-    };
-
     const institution = data?.institution;
 
     return (
-        <AdminShell
+        <ConsoleShell
+            nav={CONSOLE_NAV.admin}
             title={institution?.name ?? 'Institution'}
             subtitle={institution?.email ?? 'Institution details'}
-            onSignOut={handleSignOut}
             actions={
                 <Button asChild variant="outline" size="sm">
                     <Link href="/admin/institutions">
@@ -245,7 +239,7 @@ function InstitutionDetailContent() {
                     </Card>
                 </div>
             )}
-        </AdminShell>
+        </ConsoleShell>
     );
 }
 

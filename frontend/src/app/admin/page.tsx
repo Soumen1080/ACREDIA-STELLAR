@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
     Activity,
     ArrowRight,
@@ -14,7 +13,7 @@ import {
     Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { AdminShell } from '@/components/admin/AdminShell';
+import { ConsoleShell } from '@/components/console/ConsoleShell';
 import { ConnectWalletNotice } from '@/components/admin/ConnectWalletNotice';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -23,6 +22,7 @@ import { debugLog, captureException } from '@/lib/debug';
 import { adminFetch } from '@/lib/adminApi';
 import { runtimeConfig } from '@/lib/runtimeConfig';
 import { useContractOwner } from '@/hooks/useContractOwner';
+import { CONSOLE_NAV } from '@/lib/consoleNav';
 import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
 
 interface AdminStats {
@@ -90,8 +90,7 @@ function StatCard({
 }
 
 function AdminDashboardContent() {
-    const { user, signOut } = useAuth();
-    const router = useRouter();
+    const { user } = useAuth();
     const { address, isOwner, isChecking, contractOwner } = useContractOwner();
 
     const [stats, setStats] = useState<AdminStats>(EMPTY_STATS);
@@ -132,18 +131,13 @@ function AdminDashboardContent() {
         return () => clearInterval(interval);
     }, [isOwner, fetchStats]);
 
-    const handleSignOut = async () => {
-        await signOut();
-        router.push('/');
-    };
-
     const revokedCredentials = Math.max(stats.totalCredentials - stats.activeCredentials, 0);
 
     return (
-        <AdminShell
+        <ConsoleShell
+            nav={CONSOLE_NAV.admin}
             title="Overview"
             subtitle="System statistics and contract status"
-            onSignOut={handleSignOut}
             actions={
                 isOwner ? (
                     <Button
@@ -316,7 +310,7 @@ function AdminDashboardContent() {
                     )}
                 </div>
             )}
-        </AdminShell>
+        </ConsoleShell>
     );
 }
 

@@ -1,11 +1,12 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Settings } from 'lucide-react';
-import { DashboardShell } from '@/components/dashboard/DashboardShell';
+import { ConsoleShell } from '@/components/console/ConsoleShell';
 import { AccountSettingsPanels } from '@/components/settings/AccountSettingsPanels';
-import { ProtectedRoute } from '@/contexts/AuthContext';
-import { signOut } from '@/lib/supabase';
+import { RouteStateScreen } from '@/components/route-state/RouteStateScreen';
+import { getConsoleNav } from '@/lib/consoleNav';
+import { ProtectedRoute, useAuth } from '@/contexts/AuthContext';
 
 /**
  * Dashboard Settings page — /dashboard/settings
@@ -16,28 +17,39 @@ import { signOut } from '@/lib/supabase';
  *   2. User types "DELETE" to confirm intent.
  *   3. Client POSTs /api/account/erase with the current bearer token.
  *   4. On 204, the client signs out and redirects to the home page.
+ *
+ * Admins have the same panels at /admin/settings, inside their own console.
  */
 function SettingsContent() {
+    const { userRole } = useAuth();
     const router = useRouter();
 
-    const handleSignOut = async () => {
-        await signOut();
-        router.push('/');
-    };
+    // Links that land here generically (e.g. the notification unsubscribe
+    // redirect) must not drop an admin out of the admin console.
+    useEffect(() => {
+        if (userRole === 'admin') {
+            router.replace(`/admin/settings${window.location.search}`);
+        }
+    }, [userRole, router]);
+
+    if (userRole === 'admin') {
+        return (
+            <RouteStateScreen
+                title="Opening your console"
+                description="Taking you to the admin settings…"
+                variant="loading"
+            />
+        );
+    }
 
     return (
-        <DashboardShell
-            title="Account Settings"
+        <ConsoleShell
+            nav={getConsoleNav(userRole)}
+            title="Account settings"
             subtitle="Manage your account preferences and data rights."
-            icon={
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Settings className="h-5 w-5" />
-                </span>
-            }
-            onSignOut={handleSignOut}
         >
             <AccountSettingsPanels />
-        </DashboardShell>
+        </ConsoleShell>
     );
 }
 
