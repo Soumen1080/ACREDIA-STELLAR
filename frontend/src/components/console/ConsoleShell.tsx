@@ -50,6 +50,8 @@ function SidebarContent({
     onSignOut: () => void;
 }) {
     const pathname = usePathname();
+    const { user } = useAuth();
+    const email = user?.email;
 
     return (
         <div className="flex h-full flex-col">
@@ -107,32 +109,51 @@ function SidebarContent({
                 })}
             </nav>
 
-            <div className="shrink-0 space-y-3 border-t border-border p-3">
-                {activeNetwork.kind === 'testnet' && (
-                    <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2">
-                        <span className="relative flex h-2 w-2 shrink-0">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500/60" />
-                            <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
-                        </span>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
-                            Stellar Testnet
-                        </span>
+            {/* Account identity, wallet state, and account actions each get
+                their own band so they never read as one undifferentiated blob
+                (ACREDIA-STELLAR#225). */}
+            <div className="shrink-0 border-t border-border">
+                {email && (
+                    <div className="px-3 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Signed in as
+                        </p>
+                        <p
+                            className="mt-0.5 truncate text-sm font-medium text-foreground"
+                            title={email}
+                        >
+                            {email}
+                        </p>
                     </div>
                 )}
 
-                <div className="[&>*]:w-full">
-                    <ConnectWallet />
-                </div>
+                <div className="space-y-3 border-t border-border p-3">
+                    {activeNetwork.kind === 'testnet' && (
+                        <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2">
+                            <span className="relative flex h-2 w-2 shrink-0">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500/60" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+                            </span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                                Stellar Testnet
+                            </span>
+                        </div>
+                    )}
 
-                <Button
-                    onClick={onSignOut}
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
-                >
-                    <LogOut className="h-4 w-4" />
-                    Sign out
-                </Button>
+                    <div className="[&>*]:w-full">
+                        <ConnectWallet />
+                    </div>
+
+                    <Button
+                        onClick={onSignOut}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                        <LogOut className="h-4 w-4" />
+                        Sign out
+                    </Button>
+                </div>
             </div>
         </div>
     );

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { createE2eState, installE2eRoutes, seedE2eState } from './e2e-support';
+import { applyE2eState, createE2eState, installE2eRoutes, seedE2eState } from './e2e-support';
 
 async function runAxe(page: Page) {
     // The app can still be settling (hydration / client-side redirect) right
@@ -109,10 +109,23 @@ test('core pages pass WCAG 2.1 AA accessibility audit', async ({ page }) => {
         },
     });
 
-    await seedE2eState(page, adminState);
-    await installE2eRoutes(page);
+    // Switching roles mid-test has to overwrite the stored state — re-seeding
+    // would be ignored and this audit would silently re-check /dashboard.
+    await applyE2eState(page, adminState);
 
     await page.goto('/admin');
+    // Guards the role switch above: as an institution this page would redirect
+    // to /dashboard and the audit below would pass without ever seeing /admin.
+    await expect(page.getByRole('navigation', { name: 'Admin navigation' })).toBeVisible();
     results = await runAxe(page);
     expect(results.violations, `Admin page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+
+    // The wallet gate is a distinct visual treatment (warning-toned, centred),
+    // so it gets audited in its own right (ACREDIA-STELLAR#225).
+    await applyE2eState(page, { ...adminState, walletAddress: null });
+
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { name: 'Wallet connection required' })).toBeVisible();
+    results = await runAxe(page);
+    expect(results.violations, `Admin wallet gate violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
 });

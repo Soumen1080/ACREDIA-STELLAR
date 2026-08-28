@@ -46,6 +46,19 @@ export interface E2eAdminStats {
     };
 }
 
+export interface E2eAdminInstitution {
+    id: string;
+    name: string;
+    email: string;
+    walletAddress: string | null;
+    verified: boolean;
+    status: string;
+    authorizationTxHash: string | null;
+    createdAt: string | null;
+    credentialCount: number;
+    activeCredentialCount: number;
+}
+
 export interface E2eState {
     enabled?: boolean;
     session?: E2eSession | null;
@@ -59,6 +72,8 @@ export interface E2eState {
         walletAddress: string;
     };
     stats?: E2eAdminStats;
+    /** Rows served by the admin institutions route. */
+    adminInstitutions?: E2eAdminInstitution[];
     nextTokenId?: number;
     issuedCredentials?: E2eIssuedCredential[];
 }
