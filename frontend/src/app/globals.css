@@ -367,3 +367,38 @@
         background-size: 800px 100%;
     }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Print
+
+   A verifier attaching a credential check to a file or record should get a
+   clean document, not a screenshot of an app. Chrome is used to render PDFs
+   from this too ("Save as PDF"), so tinted status surfaces must survive —
+   `print-color-adjust: exact` keeps the verdict legible instead of dropping
+   it to white-on-white (ACREDIA-STELLAR#226).
+   ────────────────────────────────────────────────────────────────────────── */
+@media print {
+    @page {
+        margin: 16mm;
+    }
+
+    html,
+    body {
+        background: #fff;
+    }
+
+    /* Keep semantic tints (verified / revoked / integrity) in printed output. */
+    *,
+    *::before,
+    *::after {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        box-shadow: none !important;
+    }
+
+    /* Never split a status block or a fact list across pages. */
+    section,
+    [data-slot='card'] {
+        break-inside: avoid;
+    }
+}
