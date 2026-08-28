@@ -84,6 +84,26 @@ export function isEmailConfirmationError(message: string) {
     );
 }
 
+export function isEmailRateLimitError(message: string) {
+    const normalizedMessage = message.toLowerCase();
+    return (
+        normalizedMessage.includes('rate limit') ||
+        normalizedMessage.includes('over_email_send_rate_limit') ||
+        normalizedMessage.includes('too many requests') ||
+        normalizedMessage.includes('hourly limit') ||
+        normalizedMessage.includes('sending limit') ||
+        normalizedMessage.includes('quota')
+    );
+}
+
+export function getFriendlyPasswordResetError(error: unknown) {
+    const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+    if (isEmailRateLimitError(raw)) {
+        return 'Email delivery is currently throttled or rate-limited. Please wait a few minutes before trying again, or contact your institution administrator to obtain a direct single-use recovery link.';
+    }
+    return raw || 'Unable to send password reset email. Please try again later.';
+}
+
 export function getErrorMessage(error: unknown, fallbackMessage: string) {
     return error instanceof Error ? error.message : fallbackMessage;
 }
