@@ -6,28 +6,27 @@ export interface CredentialData {
     token_id: string;
     ipfs_hash?: string | null;
     blockchain_hash?: string | null;
+    on_chain_hash?: string | null;
+    /**
+     * The public verify route deliberately omits GPA, subject marks, and other
+     * granular academic data — see `standardsExport.ts` for the privacy
+     * rationale. Only what is listed here ever reaches this page.
+     */
     metadata?: {
         credentialData?: {
             studentName?: string;
             credentialType?: string;
             degree?: string;
             major?: string;
-            gpa?: string;
             issueDate?: string;
             institutionName?: string;
-            subjects?: Array<{
-                name?: string;
-                marks?: string;
-                maxMarks?: string;
-                grade?: string;
-            }>;
         };
     };
     issued_at: string;
     revoked: boolean;
     revoked_at: string | null;
-    student_wallet_address?: string;
-    issuer_wallet_address?: string;
+    student_wallet_address?: string | null;
+    issuer_wallet_address?: string | null;
     institution: {
         name: string;
     } | null;
@@ -36,6 +35,17 @@ export interface CredentialData {
 }
 
 export type IntegrityStatus = 'match' | 'mismatch' | 'unavailable';
+
+/**
+ * The `verification` half of the API response — the independent signals the
+ * report presents separately from the credential's own facts.
+ */
+export interface VerificationDetail {
+    verified: boolean;
+    revoked: boolean;
+    onChainMatch: boolean;
+    onChainFound: boolean;
+}
 
 export type ScanState =
     | 'idle'
@@ -56,6 +66,7 @@ export function useCredentialVerification(tokenId: string | null) {
     const [error, setError] = useState<string | null>(null);
     const [verificationStatus, setVerificationStatus] = useState<'valid' | 'invalid' | 'revoked' | null>(null);
     const [integrityStatus, setIntegrityStatus] = useState<IntegrityStatus | null>(null);
+    const [verificationDetail, setVerificationDetail] = useState<VerificationDetail | null>(null);
     const [manualToken, setManualToken] = useState('');
     const [scanMode, setScanMode] = useState(false);
     const [scanState, setScanState] = useState<ScanState>('idle');
@@ -112,6 +123,14 @@ export function useCredentialVerification(tokenId: string | null) {
                 institution: safe.institutionName ? { name: safe.institutionName } : null,
                 issuer_authorized: verification?.issuerAuthorized,
                 issuer_status: verification?.issuerStatus,
+                // These identifiers are already on the wire and are what the
+                // report's technical tier is built from; they used to be
+                // dropped here, leaving that whole section permanently empty.
+                student_wallet_address: safe.studentWallet ?? null,
+                issuer_wallet_address: safe.institutionWallet ?? null,
+                blockchain_hash: safe.blockchainHash ?? null,
+                ipfs_hash: safe.ipfsHash ?? null,
+                on_chain_hash: safe.onChainHash ?? null,
                 metadata: {
                     credentialData: {
                         credentialType: safe.credentialType || undefined,
@@ -126,10 +145,17 @@ export function useCredentialVerification(tokenId: string | null) {
             setCredential(transformedData);
             setVerificationStatus(safe.revoked ? 'revoked' : 'valid');
             setIntegrityStatus(verification?.integrity?.status ?? null);
+            setVerificationDetail({
+                verified: Boolean(verification?.verified),
+                revoked: Boolean(verification?.revoked ?? safe.revoked),
+                onChainMatch: Boolean(verification?.onChainMatch),
+                onChainFound: Boolean(verification?.onChainFound),
+            });
         } catch (err: unknown) {
             setError((err instanceof Error ? err.message : String(err)) || 'Failed to verify credential');
             setVerificationStatus('invalid');
             setIntegrityStatus(null);
+            setVerificationDetail(null);
         } finally {
             setLoading(false);
         }
@@ -243,6 +269,7 @@ export function useCredentialVerification(tokenId: string | null) {
         error,
         verificationStatus,
         integrityStatus,
+        verificationDetail,
         manualToken,
         setManualToken,
         scanMode,

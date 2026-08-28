@@ -67,7 +67,9 @@ test('registers, issues, verifies, and revokes a credential', async ({ page }) =
     await expect(page.getByText('Token ID: 1').first()).toBeVisible();
 
     await page.goto('/verify?token=1');
-    await expect(page.getByRole('heading', { name: 'Credential Verification Report' })).toBeVisible();
+    // One h1 for every /verify state now, so this assertion is state-agnostic
+    // and the verdict is asserted separately below (ACREDIA-STELLAR#226).
+    await expect(page.getByRole('heading', { name: 'Credential Verification', level: 1 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Credential Verified ✓' })).toBeVisible();
     await expect(page.getByText('Blockchain Verified')).toBeVisible();
     // Distinct end-to-end CID ↔ on-chain-hash integrity signal (ACREDIA-STELLAR#163) —
@@ -248,4 +250,85 @@ test('the admin wallet gate is unmissable when disconnected and gone when connec
 
     await expect(gate).toBeHidden();
     await expect(page.getByRole('heading', { name: 'Verification outcomes' })).toBeVisible();
+});
+
+test('the verification verdict leads the page at every size', async ({ page }) => {
+    const state = createE2eState({
+        issuedCredentials: [
+            {
+                id: 'cred-1',
+                token_id: '1',
+                ipfs_hash: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+                blockchain_hash:
+                    'a3f1c9e2b7d84f5a1c0e6b9d2f7a4c8e1b5d9f3a7c2e6b0d4f8a1c5e9b3d7f2a',
+                metadata: {
+                    credentialData: {
+                        degree: 'Bachelor of Science',
+                        credentialType: 'diploma',
+                        issueDate: '2024-01-01',
+                    },
+                },
+                issued_at: new Date().toISOString(),
+                revoked: false,
+                issuer_wallet_address: issuerWallet,
+                student_wallet_address: studentWallet,
+            },
+        ],
+    });
+
+    await seedE2eState(page, state);
+    await installE2eRoutes(page);
+
+    const verdict = page.locator('[aria-labelledby="verification-verdict"]');
+
+    for (const size of [
+        { width: 1280, height: 800 },
+        { width: 390, height: 844 },
+    ]) {
+        await page.setViewportSize(size);
+        await page.goto('/verify?token=1');
+
+        await expect(verdict).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Credential Verified ✓' })).toBeVisible();
+
+        // The whole point of the page: the answer is readable without scrolling.
+        const fold = await verdict.evaluate(
+            (node) => node.getBoundingClientRect().bottom <= window.innerHeight,
+        );
+        expect(fold, `verdict must sit above the fold at ${size.width}px`).toBe(true);
+
+        const overflows = await page.evaluate(
+            () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        );
+        expect(overflows, `no horizontal overflow at ${size.width}px`).toBe(false);
+    }
+
+    // Technical identifiers are collapsed until asked for, then copyable — and
+    // long hashes must not blow out the narrow viewport.
+    const cid = page.getByText('bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi');
+    await expect(cid).toBeHidden();
+
+    await page.getByRole('button', { name: /Technical details/ }).click();
+    await expect(cid).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Copy IPFS CID' })).toBeVisible();
+
+    const overflowsExpanded = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(overflowsExpanded, 'expanded hashes must not overflow at 390px').toBe(false);
+});
+
+test('every verification state shares one heading', async ({ page }) => {
+    await seedE2eState(page, createE2eState({ issuedCredentials: [] }));
+    await installE2eRoutes(page);
+
+    const heading = page.getByRole('heading', { name: 'Credential Verification', level: 1 });
+
+    // Entry state (no token), and a lookup that finds nothing.
+    await page.goto('/verify');
+    await expect(heading).toBeVisible();
+
+    await page.goto('/verify?token=999');
+    await expect(page.getByRole('heading', { name: 'Credential Not Found' })).toBeVisible();
+    await expect(heading).toBeVisible();
 });

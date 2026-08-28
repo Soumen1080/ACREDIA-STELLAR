@@ -1,21 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { VerificationStateCard } from '../src/components/verify/VerificationStateCard';
+import { VerificationVerdict } from '../src/components/verify/VerificationVerdict';
 import { BrandSectionHeader } from '../src/components/marketing/BrandSectionHeader';
 import { HOMEPAGE_FEATURES } from '../src/lib/marketingContent';
 
 describe('marketing and verification components', () => {
-    it('renders a verification status card with its supporting description', () => {
-        const html = renderToStaticMarkup(
-            <VerificationStateCard
-                status="valid"
-                title="Credential verified"
-                description="This credential is authentic."
-            />,
-        );
+    it('states the verification verdict and one supporting line', () => {
+        const html = renderToStaticMarkup(<VerificationVerdict kind="verified" />);
 
-        expect(html).toContain('Credential verified');
-        expect(html).toContain('This credential is authentic.');
+        expect(html).toContain('Credential Verified');
+        expect(html).toContain('authentic, valid, and secured on the blockchain');
+    });
+
+    it('keeps revocation and document integrity as separate verdicts', () => {
+        const revoked = renderToStaticMarkup(<VerificationVerdict kind="revoked" />);
+
+        expect(revoked).toContain('Credential Revoked');
+        // A revoked credential is a decision by the issuer, never a claim that
+        // the document itself was tampered with (ACREDIA-STELLAR#163).
+        expect(revoked).not.toContain('Integrity');
     });
 
     it('renders a reusable section heading for landing-page stories', () => {
