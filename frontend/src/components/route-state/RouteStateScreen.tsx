@@ -8,9 +8,11 @@ interface RouteStateScreenProps {
     description: string;
     actionLabel?: string;
     secondaryActionLabel?: string;
+    secondaryActionHref?: string;
     onAction?: () => void;
     onSecondaryAction?: () => void;
     variant?: 'error' | 'loading' | 'not-found';
+    error?: Error & { digest?: string };
 }
 
 export function RouteStateScreen({
@@ -18,14 +20,16 @@ export function RouteStateScreen({
     description,
     actionLabel,
     secondaryActionLabel,
+    secondaryActionHref = '/',
     onAction,
     onSecondaryAction,
     variant = 'error',
+    error,
 }: RouteStateScreenProps) {
     const isLoading = variant === 'loading';
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-app-wash px-4 py-12">
+        <div className="flex min-h-[60vh] items-center justify-center bg-app-wash px-4 py-12">
             <Card className="w-full max-w-xl p-8 text-center sm:p-10">
                 <div className="flex flex-col items-center">
                     <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -34,7 +38,7 @@ export function RouteStateScreen({
                         ) : variant === 'not-found' ? (
                             <ShieldCheck className="h-8 w-8" />
                         ) : (
-                            <AlertCircle className="h-8 w-8" />
+                            <AlertCircle className="h-8 w-8 text-destructive" />
                         )}
                     </div>
                     <p className="eyebrow mb-3">ACREDIA</p>
@@ -44,6 +48,11 @@ export function RouteStateScreen({
                     <p className="mt-4 max-w-md text-base leading-7 text-muted-foreground">
                         {description}
                     </p>
+                    {error?.digest && (
+                        <p className="mt-2 font-mono text-xs text-muted-foreground">
+                            Error reference: {error.digest}
+                        </p>
+                    )}
                     <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                         {actionLabel ? (
                             <Button onClick={onAction} size="lg">
@@ -52,7 +61,7 @@ export function RouteStateScreen({
                         ) : null}
                         {secondaryActionLabel ? (
                             <Button variant="outline" size="lg" asChild onClick={onSecondaryAction}>
-                                <Link href="/">{secondaryActionLabel}</Link>
+                                <Link href={secondaryActionHref}>{secondaryActionLabel}</Link>
                             </Button>
                         ) : null}
                     </div>
