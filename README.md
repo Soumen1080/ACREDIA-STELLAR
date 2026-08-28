@@ -676,7 +676,7 @@ Before deploying to production:
 - Use Stellar Public Network values only after contract review and a verified mainnet deployment.
 - Rotate any secret that was pasted into chat, screenshots, logs, browser code, or an issue.
 - Set server-only secrets (`SUPABASE_SERVICE_ROLE_KEY`, `PINATA_JWT`, `VERIFICATION_LOG_HASH_SECRET`, Stellar secret keys) only in the hosting provider's protected environment variables.
-- Set `NEXT_PUBLIC_SITE_URL` to your production domain (e.g. `https://acredia.io`) so Open Graph and Twitter cards resolve with absolute, publicly fetchable URLs without falling back to localhost.
+- Configure Custom SMTP in Supabase (Gmail SMTP or dedicated provider) to avoid built-in ~3/hour send caps and spam filtering.
 - Confirm Supabase RLS is enabled and production policies come from `frontend/supabase/schema.sql`.
 - Verify contract IDs on Stellar Expert before pointing users at a production environment.
 
@@ -715,6 +715,19 @@ See `SECRETS_ROTATION.md` for the complete key-rotation runbook and pre-commit/C
 2. Create a new project
 3. Get your project URL and anon key from Settings > API
 4. Run `frontend/supabase/schema.sql` in the Supabase SQL Editor (safe to re-run at any time).
+
+#### Email Deliverability & Custom SMTP Configuration
+
+Acredia requires custom SMTP to avoid the strict ~3/hour send cap on Supabase's default mailer.
+
+- **Zero-Cost Setup (Gmail SMTP):** Under **Supabase Dashboard → Project Settings → Authentication → SMTP Settings**, configure:
+  * **Host:** `smtp.gmail.com` | **Port:** `587` | **Security:** `STARTTLS`
+  * **User:** `<project_email>` | **Password:** `<Google App Password>`
+  * **Daily Limit:** ~500 emails/day
+- **Upgrade Trigger:** Migrate to a dedicated transactional provider (Resend, Postmark, SendGrid) when daily volume exceeds 300 emails or when custom sending domain SPF/DKIM/DMARC alignment is required for university firewalls.
+- **Deliverability Fallback:** Admins can generate single-use, 24-hour expiring reset/invite links directly from `/admin/institutions/[id]` for direct handoff.
+- **POC Handover:** Formal identity-verified handover with deactivation of prior accounts and audit logging is supported directly in the admin console.
+- **Guide & Runbooks:** See [Email Configuration](docs/ops/email-configuration.md) and [POC Handover Runbook](docs/ops/poc-handover.md).
 
 #### Stellar Account Setup
 
@@ -1179,6 +1192,9 @@ Deeper documentation lives under [`docs/`](docs/):
 - **[Verifiable Credentials](docs/verifiable-credentials.md)** — the W3C VC / Open Badges 3.0 metadata schema, field mapping, and a third-party verification recipe.
 - **[IPFS pin redundancy](docs/ops/pin-redundancy.md)** — the pin-keeper and the durability guarantee for issued credentials.
 - **[Operations runbook](docs/ops/runbook.md)** — on-call procedures and incident response.
+- **[Email configuration & deliverability](docs/ops/email-configuration.md)** — Supabase custom SMTP setup, sending limits, upgrade triggers, and fallback direct recovery links.
+- **[POC handover runbook](docs/ops/poc-handover.md)** — defensible identity verification procedure, account deactivation, and audit trail for institutional turnover.
+- **[Multi-user institution decision (ADR 0003)](docs/decisions/0003-multiple-institution-users.md)** — architectural decision record on multiple users per institution for business continuity.
 - **[Contract reference](contracts/README.md)** — the Soroban `AcrediaCredential` contract, storage/TTL model, and deployment.
 - **[Roadmap & backlog](ISSUE_DRAFTS.md)** — the production & market issue backlog.
 - **API reference** — _planned (see the "public verification API" item in the backlog)._
