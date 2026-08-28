@@ -55,7 +55,7 @@ export async function GET(
         const { data: institution, error: institutionError } = await supabase
             .from('institutions')
             .select(
-                'id, name, email, wallet_address, verified, status, authorization_tx_hash, created_at',
+                'id, name, email, wallet_address, verified, status, authorization_tx_hash, auth_user_id, created_at',
             )
             .eq('id', parsedId.data)
             .maybeSingle();
@@ -75,6 +75,51 @@ export async function GET(
                 { success: false, error: 'Institution not found' },
                 { status: 404 },
             );
+        }
+
+        // Fetch POC profile if auth_user_id exists
+        let pocProfile: {
+            id: string;
+            fullName: string | null;
+            email: string | null;
+            isActive: boolean;
+            deactivatedAt: string | null;
+            deactivatedReason: string | null;
+        } | null = null;
+
+        if (institution.auth_user_id) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('id, full_name, email, is_active, deactivated_at, deactivated_reason')
+                .eq('id', institution.auth_user_id)
+                .maybeSingle();
+
+            if (profile) {
+                pocProfile = {
+                    id: profile.id,
+                    fullName: profile.full_name ?? null,
+                    email: profile.email ?? institution.email,
+                    isActive: profile.is_active !== false,
+                    deactivatedAt: profile.deactivated_at ?? null,
+                    deactivatedReason: profile.deactivated_reason ?? null,
+                };
+            }
+        }
+
+        // Fetch admin audit logs for this institution
+        const { data: auditLogs, error: auditLogsError } = await supabase
+            .from('admin_audit_logs')
+            .select(
+                'id, action, actor_admin_id, requester_email, previous_poc_email, new_poc_email, details, created_at',
+            )
+            .eq('target_institution_id', parsedId.data)
+            .order('created_at', { ascending: false })
+            .limit(20);
+
+        if (auditLogsError) {
+            structuredLog('WARN', 'Error fetching audit logs for institution', requestId, {
+                error: auditLogsError,
+            });
         }
 
         const { data: credentials, error: credentialsError } = await supabase
@@ -105,7 +150,18 @@ export async function GET(
                 createdAt: institution.created_at ?? null,
                 credentialCount: rows.length,
                 activeCredentialCount: rows.filter((row) => !row.revoked).length,
+                poc: pocProfile,
             },
+            auditLogs: (auditLogs ?? []).map((log) => ({
+                id: log.id,
+                action: log.action,
+                actorAdminId: log.actor_admin_id ?? null,
+                requesterEmail: log.requester_email ?? null,
+                previousPocEmail: log.previous_poc_email ?? null,
+                newPocEmail: log.new_poc_email ?? null,
+                details: log.details ?? {},
+                createdAt: log.created_at ?? null,
+            })),
             credentials: rows.map((row) => ({
                 id: row.id,
                 tokenId: row.token_id,

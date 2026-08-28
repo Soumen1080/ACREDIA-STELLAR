@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { AuthShell } from '@/components/auth/AuthShell';
 import {
     buildAuthCallbackUrl,
-    getErrorMessage,
+    getFriendlyPasswordResetError,
     isValidEmail,
     sanitizeAuthRedirect,
 } from '@/lib/authFlow';
@@ -43,7 +43,7 @@ function ForgotPasswordForm() {
             );
 
             if (error) {
-                setError(error.message);
+                setError(getFriendlyPasswordResetError(error));
                 return;
             }
 
@@ -51,7 +51,7 @@ function ForgotPasswordForm() {
                 'Password reset link sent. Check your inbox and open the latest recovery email.',
             );
         } catch (err: unknown) {
-            setError(getErrorMessage(err, 'Unable to send password reset email'));
+            setError(getFriendlyPasswordResetError(err));
         } finally {
             setLoading(false);
         }

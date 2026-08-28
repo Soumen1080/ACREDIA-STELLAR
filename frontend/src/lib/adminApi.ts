@@ -1,5 +1,25 @@
 import { safeGetSession } from '@/lib/supabase';
 
+export interface AdminPocInfo {
+    id: string;
+    fullName: string | null;
+    email: string | null;
+    isActive: boolean;
+    deactivatedAt: string | null;
+    deactivatedReason: string | null;
+}
+
+export interface AdminAuditLog {
+    id: string;
+    action: string;
+    actorAdminId: string | null;
+    requesterEmail: string | null;
+    previousPocEmail: string | null;
+    newPocEmail: string | null;
+    details: Record<string, unknown>;
+    createdAt: string | null;
+}
+
 export interface AdminInstitutionSummary {
     id: string;
     name: string;
@@ -11,6 +31,7 @@ export interface AdminInstitutionSummary {
     createdAt: string | null;
     credentialCount: number;
     activeCredentialCount: number;
+    poc?: AdminPocInfo | null;
 }
 
 export interface AdminInstitutionCredential {
@@ -29,7 +50,7 @@ export interface AdminInstitutionCredential {
  * Admin routes are protected server-side (session + email allowlist + role), so
  * this only forwards credentials — it never decides access on its own.
  */
-export async function adminFetch<T>(path: string): Promise<T> {
+export async function adminFetch<T>(path: string, options?: RequestInit): Promise<T> {
     const {
         data: { session },
     } = await safeGetSession();
@@ -38,8 +59,15 @@ export async function adminFetch<T>(path: string): Promise<T> {
         throw new Error('Your session expired. Please sign in again.');
     }
 
+    const headers = new Headers(options?.headers);
+    headers.set('Authorization', `Bearer ${session.access_token}`);
+    if (options?.body && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+    }
+
     const response = await fetch(path, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        ...options,
+        headers,
     });
 
     const payload = await response.json().catch(() => null);

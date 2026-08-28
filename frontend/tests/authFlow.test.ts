@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_AUTH_REDIRECT,
   buildAuthRedirect,
+  getFriendlyPasswordResetError,
   getPasswordRequirements,
   isEmailConfirmationError,
+  isEmailRateLimitError,
   sanitizeAuthRedirect,
   validateRegistrationInput,
 } from '../src/lib/authFlow';
@@ -54,4 +56,21 @@ describe('auth flow helpers', () => {
     expect(isEmailConfirmationError('Please confirm your email before signing in')).toBe(true);
     expect(isEmailConfirmationError('Invalid login credentials')).toBe(false);
   });
+
+  it('detects email rate limit and deliverability throttling errors', () => {
+    expect(isEmailRateLimitError('over_email_send_rate_limit')).toBe(true);
+    expect(isEmailRateLimitError('Email rate limit exceeded')).toBe(true);
+    expect(isEmailRateLimitError('Hourly limit reached for email sending')).toBe(true);
+    expect(isEmailRateLimitError('Invalid password')).toBe(false);
+  });
+
+  it('provides actionable guidance when password reset email is throttled', () => {
+    const rateLimitMsg = getFriendlyPasswordResetError(new Error('over_email_send_rate_limit'));
+    expect(rateLimitMsg).toContain('direct single-use recovery link');
+    expect(rateLimitMsg).toContain('throttled or rate-limited');
+
+    const genericMsg = getFriendlyPasswordResetError(new Error('User not found'));
+    expect(genericMsg).toBe('User not found');
+  });
 });
+

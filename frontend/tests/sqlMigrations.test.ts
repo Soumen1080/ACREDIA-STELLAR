@@ -74,4 +74,19 @@ describe('database migration policy model', () => {
         expect(setup).toContain('ALTER COLUMN metadata_schema_version SET NOT NULL');
         expect(setup).toContain('ALTER COLUMN hash_algorithm SET NOT NULL');
     });
+
+    it('defines POC handover, admin audit logs, and institution multi-user tables', () => {
+        const handoverMigration = readSql(
+            'supabase',
+            'migrations',
+            '20260806000000_poc_handover_and_audit.sql',
+        );
+
+        expect(handoverMigration).toContain('CREATE TABLE IF NOT EXISTS public.admin_audit_logs');
+        expect(handoverMigration).toContain('CREATE TABLE IF NOT EXISTS public.institution_users');
+        expect(handoverMigration).toContain('ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true');
+        expect(handoverMigration).toContain('CREATE POLICY "Admin can view admin audit logs"');
+        expect(handoverMigration).toContain('CREATE POLICY "Institution members can view colleagues"');
+    });
 });
+
