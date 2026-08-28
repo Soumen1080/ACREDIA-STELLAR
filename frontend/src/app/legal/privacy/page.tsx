@@ -91,13 +91,13 @@ export default function PrivacyPolicyPage() {
                                         <td className="px-4 py-3 font-medium text-foreground">Verification logs</td>
                                         <td className="px-4 py-3">Verifier-supplied email / organisation (optional), verification outcome</td>
                                         <td className="px-4 py-3">Legitimate interest (fraud prevention, Art. 6(1)(f))</td>
-                                        <td className="px-4 py-3">Supabase DB — purged after 90 days</td>
+                                        <td className="px-4 py-3">Supabase DB — deleted 90 days after the verification attempt</td>
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3 font-medium text-foreground">Contact form</td>
                                         <td className="px-4 py-3">Name, email address, message content, hashed IP address, browser user-agent</td>
                                         <td className="px-4 py-3">Legitimate interest (responding to your enquiry, Art. 6(1)(f))</td>
-                                        <td className="px-4 py-3">Supabase DB — deleted within 24 months</td>
+                                        <td className="px-4 py-3">Supabase DB — deleted 24 months after the last correspondence</td>
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3 font-medium text-foreground">On-chain record</td>
@@ -204,7 +204,7 @@ export default function PrivacyPolicyPage() {
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3">Verification logs</td>
-                                        <td className="px-4 py-3">90 days (automatic nightly purge)</td>
+                                        <td className="px-4 py-3">90 days, then deleted by an automated purge that runs nightly at 03:00 UTC</td>
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3">IPFS credential documents</td>
@@ -216,7 +216,7 @@ export default function PrivacyPolicyPage() {
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3">Contact form messages</td>
-                                        <td className="px-4 py-3">24 months from last correspondence, then deleted</td>
+                                        <td className="px-4 py-3">24 months from the last correspondence, then deleted by the same nightly purge</td>
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3">Erasure request records</td>

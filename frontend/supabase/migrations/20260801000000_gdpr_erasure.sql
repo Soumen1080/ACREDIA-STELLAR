@@ -13,15 +13,15 @@
 --      service_role; nullifies / redacts PII from students, institutions,
 --      profiles, and credentials.metadata, then marks the request completed.
 --   4. Adds `purge_old_verification_logs()` — deletes verification_logs rows
---      older than 90 days (schedule via Supabase pg_cron or a CRON route).
+--      older than 90 days.
 --   5. Documents data-retention policy via COMMENT ON statements.
 --
--- pg_cron setup (run once in the Supabase SQL editor with pg_cron enabled):
---   SELECT cron.schedule(
---     'purge-verification-logs',
---     '0 3 * * *',
---     $$ SELECT public.purge_old_verification_logs(); $$
---   );
+-- SCHEDULING: handled by 20260805000000_retention_enforcement.sql, which wraps
+-- this function in public.run_retention_purge() and schedules it (pg_cron where
+-- available, plus the /api/cron/retention route). Do NOT schedule
+-- purge_old_verification_logs() directly — runs made through
+-- run_retention_purge() are recorded in public.maintenance_runs, and an
+-- unrecorded run is what issue #227 was about.
 -- =====================================================================
 
 BEGIN;
@@ -34,11 +34,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ---------------------------------------------------------------------
 -- Retention policy annotations
 -- ---------------------------------------------------------------------
+-- Superseded by the fuller annotation in
+-- 20260805000000_retention_enforcement.sql, which runs after this file.
 COMMENT ON TABLE public.verification_logs IS
     'Privacy-safe audit log for public verification attempts. '
     'Stores coarse outcomes and hashed request identifiers only — no PII. '
-    'Retention policy: rows are automatically purged after 90 days by '
-    'public.purge_old_verification_logs() (scheduled via pg_cron).';
+    'Retention policy: rows older than 90 days are deleted by '
+    'public.purge_old_verification_logs(), scheduled through '
+    'public.run_retention_purge().';
 
 COMMENT ON COLUMN public.verification_logs.verifier_email IS
     'Optional: verifier-supplied email for audit purposes. '
@@ -210,7 +213,7 @@ REVOKE ALL ON FUNCTION public.process_erasure(uuid) FROM PUBLIC;
 -- ---------------------------------------------------------------------
 -- Function: purge_old_verification_logs()
 -- Deletes verification_log rows older than 90 days (data retention policy).
--- Schedule with pg_cron; see header comment for the cron.schedule call.
+-- Called by public.run_retention_purge(); never scheduled on its own.
 -- ---------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.purge_old_verification_logs()
 RETURNS integer

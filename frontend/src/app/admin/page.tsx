@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { ConsoleShell } from '@/components/console/ConsoleShell';
 import { ConnectWalletNotice } from '@/components/admin/ConnectWalletNotice';
 import { PendingInstitutionsPanel } from '@/components/admin/PendingInstitutionsPanel';
+import { RetentionPanel } from '@/components/admin/RetentionPanel';
 import { AdminGate } from '@/components/admin/AdminGate';
 import { IndexerHealth, VerificationOutcomes } from '@/components/admin/AdminOverviewPanels';
 import { Button } from '@/components/ui/button';
@@ -296,6 +297,11 @@ function AdminDashboardContent() {
                         />
                         <IndexerHealth indexer={stats.indexer} loading={loadingStats} />
                     </div>
+
+                    {/* A stalled purge means the published privacy policy has
+                        stopped being true, so it is surfaced here rather than
+                        left to silence (ACREDIA-STELLAR#227). */}
+                    <RetentionPanel refreshToken={refreshToken} />
 
                     {/* Deployment metadata: useful, but never the loudest thing
                         on the page. */}

@@ -55,6 +55,15 @@ type ServerRuntimeConfig = {
     verification: {
         hashSecret: string;
     };
+    /**
+     * Shared secret the scheduler presents to /api/cron/*. Vercel Cron sends
+     * it automatically as `Authorization: Bearer $CRON_SECRET`. Empty means
+     * unconfigured, and the cron routes refuse to run rather than exposing an
+     * unauthenticated endpoint that deletes rows (issue #227).
+     */
+    cron: {
+        secret: string;
+    };
     debug: {
         enableLogs: boolean;
     };
@@ -407,6 +416,11 @@ function buildServerRuntimeConfig(): ServerRuntimeConfig {
                 readEnv('VERIFICATION_LOG_HASH_SECRET') ??
                 serviceRoleKey ??
                 'local-verification-log-hash-secret',
+        },
+        cron: {
+            // Deliberately no fallback: a guessable or shared default would
+            // make the purge endpoint callable by anyone.
+            secret: readEnv('CRON_SECRET') ?? '',
         },
         debug: {
             enableLogs: runtimeConfig.debug.enableLogs,
