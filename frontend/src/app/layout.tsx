@@ -4,6 +4,8 @@ import './globals.css';
 import { Providers } from '@/components/providers';
 import { Toaster } from '@/components/ui/sonner';
 
+import { getMetadataBase, getSiteUrl } from '@/lib/siteUrl';
+
 const inter = Inter({
     subsets: ['latin'],
     display: 'swap',
@@ -11,19 +13,51 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-    title: 'Acredia - Blockchain Academic Credentials',
-    description: 'Secure, tamper-proof academic credentials powered by blockchain',
+    metadataBase: getMetadataBase(),
+    title: {
+        default: 'Acredia - Blockchain Academic Credentials',
+        template: '%s | Acredia',
+    },
+    description:
+        'Secure, tamper-proof academic credentials powered by Stellar blockchain and IPFS.',
+    keywords: [
+        'academic credentials',
+        'blockchain verification',
+        'Stellar',
+        'verifiable credentials',
+        'digital diplomas',
+        'NFT degrees',
+    ],
+    authors: [{ name: 'Acredia Team' }],
+    creator: 'Acredia',
+    publisher: 'Acredia',
+    alternates: {
+        canonical: '/',
+    },
     openGraph: {
         title: 'Acredia - Blockchain Academic Credentials',
-        description: 'Secure, tamper-proof academic credentials powered by blockchain',
-        images: ['/logo.png'],
+        description:
+            'Secure, tamper-proof academic credentials powered by Stellar blockchain and IPFS.',
+        url: getSiteUrl(),
+        siteName: 'Acredia',
+        images: [
+            {
+                url: '/logo.png',
+                width: 1200,
+                height: 630,
+                alt: 'Acredia - Blockchain Academic Credentials',
+            },
+        ],
         type: 'website',
+        locale: 'en_US',
     },
     twitter: {
         card: 'summary_large_image',
         title: 'Acredia - Blockchain Academic Credentials',
-        description: 'Secure, tamper-proof academic credentials powered by blockchain',
+        description:
+            'Secure, tamper-proof academic credentials powered by Stellar blockchain and IPFS.',
         images: ['/logo.png'],
+        creator: '@acredia',
     },
     // Favicon/icons are provided by the file-based conventions in this directory
     // (src/app/favicon.ico and src/app/icon.png), so the browser's default

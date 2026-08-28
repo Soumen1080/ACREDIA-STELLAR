@@ -676,6 +676,7 @@ Before deploying to production:
 - Use Stellar Public Network values only after contract review and a verified mainnet deployment.
 - Rotate any secret that was pasted into chat, screenshots, logs, browser code, or an issue.
 - Set server-only secrets (`SUPABASE_SERVICE_ROLE_KEY`, `PINATA_JWT`, `VERIFICATION_LOG_HASH_SECRET`, Stellar secret keys) only in the hosting provider's protected environment variables.
+- Set `NEXT_PUBLIC_SITE_URL` to your production domain (e.g. `https://acredia.io`) so Open Graph and Twitter cards resolve with absolute, publicly fetchable URLs without falling back to localhost.
 - Confirm Supabase RLS is enabled and production policies come from `frontend/supabase/schema.sql`.
 - Verify contract IDs on Stellar Expert before pointing users at a production environment.
 
