@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { createE2eState, installE2eRoutes, seedE2eState } from './e2e-support';
+import {
+    applyE2eState,
+    createAdminInstitution,
+    createE2eState,
+    installE2eRoutes,
+    seedE2eState,
+} from './e2e-support';
 
 const issuerWallet = 'GAcrediaIssuerWallet0000000000000000000000000000001';
 const adminWallet = 'GAcrediaAdminWallet00000000000000000000000000000001';
@@ -160,4 +166,86 @@ test('authorizes an issuer from the admin dashboard', async ({ page }) => {
     await page.getByLabel('Wallet Address to Authorize').fill(issuerWallet);
     await page.getByRole('button', { name: 'Authorize Wallet' }).click();
     await expect(page.getByText('Authorized to issue credentials', { exact: true })).toBeVisible();
+});
+
+test('admin console is the only admin landing screen', async ({ page }) => {
+    const state = createE2eState({
+        role: 'admin',
+        walletAddress: adminWallet,
+        contractOwner: adminWallet,
+        session: {
+            user: { id: 'admin-user-1', email: 'admin@acredia.test' },
+            access_token: 'e2e-admin-token',
+        },
+        adminInstitutions: [
+            createAdminInstitution({ id: 'inst-1', status: 'pending' }),
+            createAdminInstitution({ id: 'inst-2', status: 'verified' }),
+        ],
+    });
+
+    await seedE2eState(page, state);
+    await installE2eRoutes(page);
+
+    // There is exactly one admin console: /dashboard hands admins over to it
+    // rather than rendering a second, emptier version of the same thing
+    // (docs/decisions/0001-single-admin-console.md).
+    await page.goto('/dashboard');
+    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
+
+    // ...and the settings entry point admins can be sent to generically.
+    await page.goto('/dashboard/settings');
+    await expect(page).toHaveURL(/\/admin\/settings$/);
+
+    await page.goto('/admin');
+
+    // The landing screen leads with what needs attention.
+    await expect(
+        page.getByRole('heading', { name: '1 institution is awaiting review' }),
+    ).toBeVisible();
+    await page.getByRole('link', { name: 'Review institutions' }).click();
+    await expect(page).toHaveURL(/\/admin\/institutions$/);
+
+    // Identity, wallet state, and sign-out are three separated bands in the
+    // sidebar rather than one Account card on the page.
+    const sidebar = page.getByRole('navigation', { name: 'Admin navigation' });
+    await expect(sidebar).toBeVisible();
+    await expect(page.getByText('admin@acredia.test')).toBeVisible();
+});
+
+test('the admin wallet gate is unmissable when disconnected and gone when connected', async ({
+    page,
+}) => {
+    const disconnected = createE2eState({
+        role: 'admin',
+        walletAddress: null,
+        contractOwner: adminWallet,
+        session: {
+            user: { id: 'admin-user-1', email: 'admin@acredia.test' },
+            access_token: 'e2e-admin-token',
+        },
+    });
+
+    await seedE2eState(page, disconnected);
+    await installE2eRoutes(page);
+
+    await page.goto('/admin');
+    const gate = page.getByRole('heading', { name: 'Wallet connection required' });
+    await expect(gate).toBeVisible();
+
+    // The gate is centred in the content area, so the screen does not end
+    // half-way down the viewport (ACREDIA-STELLAR#225).
+    const filled = await page.evaluate(() => {
+        const main = document.querySelector('main');
+        const bottom = main?.getBoundingClientRect().bottom ?? 0;
+        return bottom / window.innerHeight;
+    });
+    expect(filled, 'the admin landing screen must not end half-way down').toBeGreaterThan(0.8);
+
+    // Connected: the gate disappears entirely and the wallet becomes a quiet
+    // sidebar control.
+    await applyE2eState(page, { ...disconnected, walletAddress: adminWallet });
+
+    await expect(gate).toBeHidden();
+    await expect(page.getByRole('heading', { name: 'Verification outcomes' })).toBeVisible();
 });

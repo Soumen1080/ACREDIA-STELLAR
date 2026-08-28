@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { E2eAdminStats, E2eState } from '@/lib/e2e';
+import type { E2eAdminInstitution, E2eAdminStats, E2eState } from '@/lib/e2e';
 
 export function createE2eState(overrides: Partial<E2eState> = {}): E2eState {
     return {
@@ -23,6 +23,7 @@ export function createE2eState(overrides: Partial<E2eState> = {}): E2eState {
             walletAddress: 'GAcrediaIssuerWallet0000000000000000000000000000001',
         },
         stats: createAdminStats(),
+        adminInstitutions: [createAdminInstitution()],
         nextTokenId: 1,
         issuedCredentials: [],
         ...overrides,
@@ -53,6 +54,24 @@ export function createAdminStats(overrides: Partial<E2eAdminStats> = {}): E2eAdm
     };
 }
 
+export function createAdminInstitution(
+    overrides: Partial<E2eAdminInstitution> = {},
+): E2eAdminInstitution {
+    return {
+        id: 'inst-1',
+        name: 'Acredia Academy',
+        email: 'issuer@acredia.test',
+        walletAddress: 'GAcrediaIssuerWallet0000000000000000000000000000001',
+        verified: true,
+        status: 'verified',
+        authorizationTxHash: null,
+        createdAt: new Date().toISOString(),
+        credentialCount: 0,
+        activeCredentialCount: 0,
+        ...overrides,
+    };
+}
+
 export async function seedE2eState(page: Page, state: E2eState) {
     await page.addInitScript((initialState) => {
         const stored = window.sessionStorage.getItem('__ACREDIA_E2E__');
@@ -67,6 +86,22 @@ export async function seedE2eState(page: Page, state: E2eState) {
         window.__ACREDIA_E2E__ = initialState as typeof window.__ACREDIA_E2E__;
         window.sessionStorage.setItem('__ACREDIA_E2E__', JSON.stringify(initialState));
     }, state);
+}
+
+/**
+ * Replace the E2E state of an already-loaded page and reload it.
+ *
+ * `seedE2eState` deliberately keeps whatever is already in sessionStorage, so
+ * that state a test mutated (an issued credential, say) survives navigation.
+ * That also means calling it a second time is a no-op — switching roles
+ * mid-test has to overwrite the stored state explicitly.
+ */
+export async function applyE2eState(page: Page, state: E2eState) {
+    await page.evaluate((next) => {
+        window.__ACREDIA_E2E__ = next as typeof window.__ACREDIA_E2E__;
+        window.sessionStorage.setItem('__ACREDIA_E2E__', JSON.stringify(next));
+    }, state);
+    await page.reload();
 }
 
 /**
@@ -125,6 +160,20 @@ export async function installE2eRoutes(page: Page) {
                 total: credentials.length,
                 page: 1,
                 totalPages: 1,
+            }),
+        });
+    });
+
+    // The list route only — `/api/admin/institutions/:id` is a different page.
+    await page.route('**/api/admin/institutions', async (route) => {
+        const state = await readE2eState(page);
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                success: true,
+                institutions: state?.adminInstitutions ?? [],
             }),
         });
     });
