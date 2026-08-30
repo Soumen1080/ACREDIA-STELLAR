@@ -1,13 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceRoleClient, requireAuthenticatedRequest } from '@/lib/serverAuth';
 import { structuredLog } from '@/lib/debug';
+import { enforceRateLimit } from '@/lib/rateLimit';
+
+// Coarse per-IP guard against anonymous floods before auth runs.
+const NOTIFICATIONS_TRIGGER_IP_LIMIT = {
+    windowSeconds: 60,
+    maxRequests: 30,
+    prefix: 'notifications-trigger-ip',
+} as const;
+
+// Each call queues a send_email job; keep this bounded per-account so a
+// compromised or careless institution cannot mail-bomb its students and
+// exhaust the shared SMTP quota for every tenant.
+const NOTIFICATIONS_TRIGGER_USER_QUOTA = {
+    windowSeconds: 60,
+    maxRequests: 20,
+    prefix: 'notifications-trigger-user',
+} as const;
 
 export async function POST(request: NextRequest) {
     try {
+        const ipRateLimitResponse = await enforceRateLimit(request, NOTIFICATIONS_TRIGGER_IP_LIMIT);
+        if (ipRateLimitResponse) return ipRateLimitResponse;
+
         const authCheck = await requireAuthenticatedRequest(request);
         if (!authCheck.ok) {
             return NextResponse.json({ success: false, error: authCheck.error }, { status: authCheck.status });
         }
+
+        const userRateLimitResponse = await enforceRateLimit(request, {
+            ...NOTIFICATIONS_TRIGGER_USER_QUOTA,
+            identifier: authCheck.userId,
+        });
+        if (userRateLimitResponse) return userRateLimitResponse;
 
         const body = await request.json();
         const { type, tokenId } = body;
