@@ -10,6 +10,7 @@ import {
     Account,
     TimeoutInfinite,
     scValToNative,
+    nativeToScVal,
     xdr,
 } from '@stellar/stellar-sdk';
 import { credentialHashBytesToHex } from './credentialHashEncoding';
@@ -165,11 +166,53 @@ export function normalizeOnChainCredential(result: unknown): OnChainCredential |
     };
 }
 
+function toU64ScVal(tokenId: string | number): xdr.ScVal {
+    try {
+        return nativeToScVal(BigInt(tokenId), { type: 'u64' });
+    } catch {
+        return xdr.ScVal.scvU64(new xdr.Uint64(BigInt(tokenId)));
+    }
+}
+
+/**
+ * Direct on-chain simulation read for get_credential(token_id).
+ * Used when the database index is missing or pruned (Issue #232).
+ */
+export async function getCredentialFromChain(tokenId: string | number): Promise<OnChainCredential | null> {
+    try {
+        const arg = toU64ScVal(tokenId);
+        const result = await simulate('get_credential', [arg]);
+        return normalizeOnChainCredential(result);
+    } catch (error) {
+        if (error instanceof CredentialNotFoundError) {
+            return null;
+        }
+        throw error;
+    }
+}
+
+/**
+ * Direct on-chain simulation read for is_revoked(token_id).
+ */
+export async function isRevokedFromChain(tokenId: string | number): Promise<boolean> {
+    try {
+        const arg = toU64ScVal(tokenId);
+        const result = await simulate('is_revoked', [arg]);
+        return Boolean(result);
+    } catch (error) {
+        if (error instanceof CredentialNotFoundError) {
+            return false;
+        }
+        throw error;
+    }
+}
+
 import { getServiceRoleClient } from './serverAuth';
 
 /**
  * Fetch full credential struct by token_id (u64).
- * Returns null if the token does not exist on-chain (in index).
+ * Checks the database index first, and transparently falls back to
+ * live on-chain simulation if the database row is absent (Issue #232).
  */
 export async function getCredential(tokenId: string | number): Promise<OnChainCredential | null> {
     const e2eState = getE2eState();
@@ -201,19 +244,28 @@ export async function getCredential(tokenId: string | number): Promise<OnChainCr
             .eq('token_id', String(tokenId))
             .maybeSingle();
 
-        if (!data) return null;
+        if (data) {
+            return {
+                token_id: data.token_id ? Number(data.token_id) : undefined,
+                student: data.student_wallet_address || '',
+                issuer: data.issuer_wallet_address || '',
+                hash: data.blockchain_hash || '',
+                uri: data.ipfs_hash ? `ipfs://${data.ipfs_hash}` : '',
+                issued_at: data.issued_at ? Date.parse(data.issued_at) : 0,
+                revoked: data.revoked || false,
+            };
+        }
+    } catch {
+        // Fall through to on-chain read
+    }
 
-        return {
-            token_id: data.token_id ? Number(data.token_id) : undefined,
-            student: data.student_wallet_address || '',
-            issuer: data.issuer_wallet_address || '',
-            hash: data.blockchain_hash || '',
-            uri: data.ipfs_hash ? `ipfs://${data.ipfs_hash}` : '',
-            issued_at: data.issued_at ? Date.parse(data.issued_at) : 0,
-            revoked: data.revoked || false,
-        };
+    try {
+        return await getCredentialFromChain(tokenId);
     } catch (error) {
-        throw new BlockchainUnavailableError('Database/Index unavailable');
+        if (error instanceof BlockchainUnavailableError || error instanceof ContractConfigurationError) {
+            throw error;
+        }
+        return null;
     }
 }
 
@@ -266,9 +318,17 @@ export async function isRevoked(tokenId: string | number): Promise<boolean> {
             .eq('token_id', String(tokenId))
             .maybeSingle();
             
-        return data?.revoked === true;
-    } catch (error) {
-        return false; // Safest fallback or throw
+        if (data && typeof data.revoked === 'boolean') {
+            return data.revoked;
+        }
+    } catch {
+        // Fall through to on-chain check
+    }
+
+    try {
+        return await isRevokedFromChain(tokenId);
+    } catch {
+        return false;
     }
 }
 

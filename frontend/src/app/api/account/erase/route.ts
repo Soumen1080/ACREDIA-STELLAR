@@ -123,7 +123,21 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 5. Delete the auth user — cascades to profiles via FK.
+        // Issue #232: explicitly unlink the auth_user_id from business records
+        // before deleting the auth user, ensuring no cascade can possibly occur
+        // even if foreign keys are mis-configured.
+        await Promise.all([
+            serviceClient
+                .from('institutions')
+                .update({ auth_user_id: null, status: 'suspended' })
+                .eq('auth_user_id', userId),
+            serviceClient
+                .from('students')
+                .update({ auth_user_id: null })
+                .eq('auth_user_id', userId),
+        ]);
+
+        // 5. Delete the auth user — cascades to profiles via FK, but business records survive.
         const { error: deleteAuthError } = await serviceClient.auth.admin.deleteUser(userId);
 
         if (deleteAuthError) {
