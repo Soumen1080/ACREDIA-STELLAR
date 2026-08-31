@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Institutions
 CREATE TABLE IF NOT EXISTS public.institutions (
     id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    auth_user_id          UUID REFERENCES auth.users (id) ON DELETE CASCADE,
+    auth_user_id          UUID REFERENCES auth.users (id) ON DELETE SET NULL,
     name                  TEXT NOT NULL,
     email                 TEXT UNIQUE NOT NULL,
     wallet_address        TEXT UNIQUE,
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS public.institutions (
 -- Students
 CREATE TABLE IF NOT EXISTS public.students (
     id             UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    auth_user_id   UUID REFERENCES auth.users (id) ON DELETE CASCADE,
+    auth_user_id   UUID REFERENCES auth.users (id) ON DELETE SET NULL,
     name           TEXT NOT NULL,
     email          TEXT UNIQUE NOT NULL,
     wallet_address TEXT UNIQUE,
@@ -84,9 +84,9 @@ CREATE TABLE IF NOT EXISTS public.students (
 -- Credentials
 CREATE TABLE IF NOT EXISTS public.credentials (
     id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    student_id              UUID REFERENCES public.students (id) ON DELETE CASCADE,
+    student_id              UUID REFERENCES public.students (id) ON DELETE RESTRICT,
     student_wallet_address  TEXT,
-    institution_id          UUID REFERENCES public.institutions (id) ON DELETE CASCADE,
+    institution_id          UUID REFERENCES public.institutions (id) ON DELETE RESTRICT,
     issuer_wallet_address   TEXT,
     token_id                TEXT UNIQUE NOT NULL,
     ipfs_hash               TEXT NOT NULL,
@@ -155,6 +155,20 @@ ALTER TABLE public.credentials
     ALTER COLUMN hash_algorithm SET DEFAULT 'sha256:canonical-json:v1',
     ALTER COLUMN metadata_schema_version SET NOT NULL,
     ALTER COLUMN hash_algorithm SET NOT NULL;
+
+-- Database-level guard against deleting credentials (Issue #232)
+CREATE OR REPLACE FUNCTION public.prevent_credential_deletion()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'Deleting credentials is not allowed. They are immutable business records.';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS block_credential_delete ON public.credentials;
+CREATE TRIGGER block_credential_delete
+    BEFORE DELETE ON public.credentials
+    FOR EACH ROW
+    EXECUTE FUNCTION public.prevent_credential_deletion();
 
 -- ---------------------------------------------------------------------
 -- Functions

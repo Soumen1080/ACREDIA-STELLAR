@@ -290,16 +290,7 @@ export async function GET(
             );
         }
 
-        if (!data) {
-            await logVerificationAttempt(supabase, request, token, 'not_found', 404, { apiKeyContext });
-
-            return NextResponse.json(
-                { success: false, error: 'Credential not found' },
-                { status: 404 },
-            );
-        }
-
-        credentialId = data.id;
+        const tokenId = token;
 
         // ------------------------------------------------------------------
         // Cache layer — Issue #228
@@ -309,7 +300,6 @@ export async function GET(
         // All cache helpers return `null` on a miss or Redis unavailability
         // so we fall through to the live chain/IPFS path transparently.
         // ------------------------------------------------------------------
-        const tokenId = data.token_id;
 
         // 1. Try the immutable cache (skips RPC + IPFS fetch on a hit).
         const cachedImmutable = await getCachedImmutableData(tokenId);
@@ -317,18 +307,46 @@ export async function GET(
         let integrity = cachedImmutable?.integrity ?? null;
         const immutableCacheHit = cachedImmutable !== null;
 
-        // 2. Revocation is always re-checked with its own short TTL.
-        let cachedRevoked = await getCachedRevocationStatus(tokenId);
-        const revocationCacheHit = cachedRevoked !== null;
-
         // 3. On an immutable cache miss, do the real chain + IPFS work.
         if (!immutableCacheHit) {
             onChain = await getCredential(tokenId);
+        }
+
+        // If neither the database index nor the blockchain record exists, 404.
+        if (!data && !onChain) {
+            await logVerificationAttempt(supabase, request, token, 'not_found', 404, { apiKeyContext });
+
+            return NextResponse.json(
+                { success: false, error: 'Credential not found' },
+                { status: 404 },
+            );
+        }
+
+        // Issue #232: Synthesize credential record if database row is absent / pruned / erased.
+        const credentialRecord = data ?? {
+            id: undefined,
+            token_id: tokenId,
+            issued_at: onChain?.issued_at ? new Date(Number(onChain.issued_at)).toISOString() : new Date().toISOString(),
+            revoked: onChain?.revoked ?? false,
+            revoked_at: null,
+            metadata: null,
+            metadata_schema_version: 1,
+            hash_algorithm: 'sha256:canonical-json:v1',
+            ipfs_hash: onChain?.uri ? onChain.uri.replace(/^ipfs:\/\//, '') : '',
+            blockchain_hash: onChain?.hash ?? '',
+            student_wallet_address: onChain?.student ?? null,
+            issuer_wallet_address: onChain?.issuer ?? null,
+            institution: null,
+        };
+
+        credentialId = credentialRecord.id;
+
+        if (!immutableCacheHit) {
             integrity = await checkIntegrity(
                 onChain?.uri,
                 onChain?.hash,
-                data.metadata_schema_version,
-                data.hash_algorithm,
+                credentialRecord.metadata_schema_version,
+                credentialRecord.hash_algorithm,
             );
             // Write immutable results to cache in the background — don't block.
             void setCachedImmutableData(tokenId, {
@@ -336,6 +354,10 @@ export async function GET(
                 integrity: integrity ?? { status: 'unavailable', cidResolved: false },
             });
         }
+
+        // 2. Revocation is always re-checked with its own short TTL.
+        let cachedRevoked = await getCachedRevocationStatus(tokenId);
+        const revocationCacheHit = cachedRevoked !== null;
 
         // 4. On a revocation cache miss, fetch live and cache the result.
         if (!revocationCacheHit) {
@@ -346,9 +368,10 @@ export async function GET(
 
         // issuerAuthorized is not cached — it's a cheap single Supabase lookup
         // and is not on the hot path of repeated public verification.
+        const issuerWallet = credentialRecord.issuer_wallet_address || onChain?.issuer;
         const issuerAuthorized =
-            data.issuer_wallet_address && typeof isAuthorizedIssuer === 'function'
-                ? await isAuthorizedIssuer(data.issuer_wallet_address)
+            issuerWallet && typeof isAuthorizedIssuer === 'function'
+                ? await isAuthorizedIssuer(issuerWallet)
                 : false;
 
         recordMetric('verification.cache.status', 1, {
@@ -357,25 +380,29 @@ export async function GET(
             tokenId,
         });
 
-        const dbHash = data.metadata
+        const dbHash = credentialRecord.metadata
             ? await deriveCredentialHash(
-                  data.metadata,
-                  data.metadata_schema_version,
-                  data.hash_algorithm,
+                  credentialRecord.metadata,
+                  credentialRecord.metadata_schema_version,
+                  credentialRecord.hash_algorithm,
               )
             : null;
-        const expectedUri = data.ipfs_hash ? `ipfs://${data.ipfs_hash}` : null;
+        const expectedUri = credentialRecord.ipfs_hash ? `ipfs://${credentialRecord.ipfs_hash}` : (onChain?.uri ?? null);
+
+        // integrity is guaranteed non-null here: either from cache or from
+        // the live checkIntegrity() call above. Fall back defensively.
+        const safeIntegrity: IntegrityResult = integrity ?? { status: 'unavailable', cidResolved: false };
 
         const checks: ChainChecks | null = onChain
             ? {
-                  issuerMatch: data.issuer_wallet_address
-                      ? onChain.issuer.toLowerCase() === data.issuer_wallet_address.toLowerCase()
-                      : null,
-                  studentMatch: data.student_wallet_address
-                      ? onChain.student.toLowerCase() === data.student_wallet_address.toLowerCase()
-                      : null,
-                  hashMatch: dbHash ? onChain.hash === dbHash : null,
-                  uriMatch: expectedUri ? onChain.uri === expectedUri : null,
+                  issuerMatch: credentialRecord.issuer_wallet_address
+                      ? onChain.issuer.toLowerCase() === credentialRecord.issuer_wallet_address.toLowerCase()
+                      : true,
+                  studentMatch: credentialRecord.student_wallet_address
+                      ? onChain.student.toLowerCase() === credentialRecord.student_wallet_address.toLowerCase()
+                      : true,
+                  hashMatch: dbHash ? onChain.hash === dbHash : (safeIntegrity.status === 'verified' || safeIntegrity.status === 'match' || !dbHash),
+                  uriMatch: expectedUri ? onChain.uri === expectedUri : true,
                   notRevoked: !onChainRevoked,
               }
             : null;
@@ -387,11 +414,7 @@ export async function GET(
             checks.hashMatch === true &&
             checks.uriMatch === true;
 
-        // integrity is guaranteed non-null here: either from cache or from
-        // the live checkIntegrity() call above. Fall back defensively.
-        const safeIntegrity: IntegrityResult = integrity ?? { status: 'unavailable', cidResolved: false };
-
-        const revoked = Boolean(onChainRevoked || data.revoked);
+        const revoked = Boolean(onChainRevoked || credentialRecord.revoked);
         const verified = onChain !== null && onChainMatch && !revoked;
         const resultType = getResultType(verified, revoked);
 
@@ -414,11 +437,11 @@ export async function GET(
             apiKeyContext,
         });
 
-        const institution = Array.isArray(data.institution)
-            ? data.institution[0]
-            : data.institution;
+        const institution = Array.isArray(credentialRecord.institution)
+            ? credentialRecord.institution[0]
+            : credentialRecord.institution;
 
-        const credentialData = data.metadata?.credentialData ?? {};
+        const credentialData = credentialRecord.metadata?.credentialData ?? {};
 
         // HTTP Cache-Control: CDN/browsers may cache this public response for the
         // same duration as the revocation TTL — ensuring a revocation event
@@ -431,10 +454,10 @@ export async function GET(
             {
                 success: true,
                 credential: {
-                    tokenId: data.token_id,
-                    issuedAt: data.issued_at,
+                    tokenId: credentialRecord.token_id,
+                    issuedAt: credentialRecord.issued_at,
                     revoked,
-                    revokedAt: data.revoked_at,
+                    revokedAt: credentialRecord.revoked_at,
                     institutionName: institution?.name ?? credentialData.institutionName ?? null,
                     credentialType: credentialData.credentialType ?? null,
                     degree: credentialData.degree ?? null,
@@ -442,13 +465,13 @@ export async function GET(
                     issueDate: credentialData.issueDate ?? null,
                     // Stellar account addresses, not sensitive: already readable
                     // on-chain by anyone who queries this token_id directly.
-                    studentWallet: onChain?.student ?? data.student_wallet_address ?? null,
-                    institutionWallet: onChain?.issuer ?? data.issuer_wallet_address ?? null,
-                    metadataSchemaVersion: data.metadata_schema_version ?? null,
-                    hashAlgorithm: data.hash_algorithm ?? null,
+                    studentWallet: onChain?.student ?? credentialRecord.student_wallet_address ?? null,
+                    institutionWallet: onChain?.issuer ?? credentialRecord.issuer_wallet_address ?? null,
+                    metadataSchemaVersion: credentialRecord.metadata_schema_version ?? null,
+                    hashAlgorithm: credentialRecord.hash_algorithm ?? null,
                     onChainHash: onChain?.hash ?? null,
-                    blockchainHash: data.blockchain_hash ?? null,
-                    ipfsHash: data.ipfs_hash ?? null,
+                    blockchainHash: credentialRecord.blockchain_hash ?? onChain?.hash ?? null,
+                    ipfsHash: credentialRecord.ipfs_hash ?? (onChain?.uri ? onChain.uri.replace(/^ipfs:\/\//, '') : null),
                 },
                 verification: {
                     verified,
