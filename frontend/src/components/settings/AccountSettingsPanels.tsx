@@ -128,19 +128,24 @@ export function AccountSettingsPanels() {
 
                 {/* What gets deleted */}
                 <div className="mt-5 rounded-lg bg-secondary/50 p-4 text-sm">
-                    <p className="font-medium text-foreground">What will be deleted:</p>
+                    <p className="font-medium text-foreground">What will be deleted / scrubbed:</p>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
-                        <li>Your email, name, and profile data from our database</li>
-                        <li>Your credential metadata (name, degree, grade) from our database</li>
-                        <li>Your credential documents will be unpinned from IPFS</li>
+                        <li>Your personal login credentials, email, and profile data from our database</li>
+                        <li>For students: your student account link and personal notification preferences</li>
+                        <li>For institution admins: your administrative user account access is revoked</li>
                     </ul>
-                    <p className="mt-3 font-medium text-foreground">What cannot be deleted:</p>
+                    <p className="mt-3 font-medium text-foreground">What is retained and why:</p>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
                         <li>
-                            <strong className="text-foreground">On-chain records</strong> — a
-                            SHA-256 hash of your credential is anchored on the Stellar blockchain.
-                            This hash is immutable by design and does not contain personal data (it
-                            is a one-way fingerprint). It is retained under GDPR Art. 17(3)(b).{' '}
+                            <strong className="text-foreground">Issued academic credentials</strong> — credentials
+                            issued to students are official business and academic records owned by the recipient
+                            graduates. Deleting an administrator account does not delete, revoke, or invalidate
+                            credentials issued to third parties (retained under GDPR Art. 17(3)(b) &amp; (d)).
+                        </li>
+                        <li>
+                            <strong className="text-foreground">On-chain records</strong> — cryptographic SHA-256
+                            hashes and token IDs anchored on the Stellar blockchain are immutable by design and
+                            do not contain readable personal data. They are retained under GDPR Art. 17(3)(b).{' '}
                             <Link href="/legal/privacy#on-chain" className="text-primary underline">
                                 Learn more →
                             </Link>

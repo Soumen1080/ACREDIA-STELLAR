@@ -199,8 +199,12 @@ export default function PrivacyPolicyPage() {
                                 </thead>
                                 <tbody className="divide-y divide-border text-muted-foreground">
                                     <tr>
-                                        <td className="px-4 py-3">Account profile &amp; credentials</td>
-                                        <td className="px-4 py-3">Lifetime of account; deleted on erasure request</td>
+                                        <td className="px-4 py-3">Account profile &amp; user login</td>
+                                        <td className="px-4 py-3">Lifetime of account; deleted/scrubbed on erasure request</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="px-4 py-3">Issued academic credentials</td>
+                                        <td className="px-4 py-3">Retained as permanent academic business records under GDPR Art. 17(3)(b) &amp; (d) to protect third-party graduate entitlements</td>
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3">Verification logs</td>
@@ -208,11 +212,11 @@ export default function PrivacyPolicyPage() {
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3">IPFS credential documents</td>
-                                        <td className="px-4 py-3">Unpinned on erasure request (content becomes inaccessible)</td>
+                                        <td className="px-4 py-3">Encrypted storage; pinned during credential lifecycle</td>
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3">On-chain hash record</td>
-                                        <td className="px-4 py-3">Permanent (see §6)</td>
+                                        <td className="px-4 py-3">Permanent immutable blockchain record (see §7)</td>
                                     </tr>
                                     <tr>
                                         <td className="px-4 py-3">Contact form messages</td>
@@ -272,9 +276,10 @@ export default function PrivacyPolicyPage() {
                             <li><strong className="text-foreground">Rectification</strong> — correct inaccurate personal data.</li>
                             <li>
                                 <strong className="text-foreground">Erasure</strong> — delete your account via
-                                Dashboard → Settings → Delete Account. This removes your profile, credentials
-                                metadata, and IPFS documents. On-chain hashes are not PII and are retained
-                                (see §6).
+                                Dashboard → Settings → Delete Account. This removes your personal user account, profile,
+                                and personal preferences. Academic credentials previously issued to students are retained
+                                under Art. 17(3)(b) and (d) as records belonging to the recipient data subjects, and
+                                on-chain cryptographic hashes are permanent non-PII records (see §7).
                             </li>
                             <li><strong className="text-foreground">Portability</strong> — export your credential data in JSON/PDF via the dashboard.</li>
                             <li><strong className="text-foreground">Restriction</strong> — restrict processing in certain circumstances.</li>
