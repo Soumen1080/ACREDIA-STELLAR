@@ -32,7 +32,14 @@ export interface AdminInstitutionSummary {
     credentialCount: number;
     activeCredentialCount: number;
     poc?: AdminPocInfo | null;
+    onboardingState?: OnboardingState;
+    invitedAt?: string | null;
+    inviteExpiresAt?: string | null;
+    inviteAcceptedAt?: string | null;
 }
+
+/** Provisioning progress: invited -> active -> wallet authorized. */
+export type OnboardingState = 'invited' | 'invite_expired' | 'active' | 'wallet_authorized';
 
 export interface AdminInstitutionCredential {
     id: string;
@@ -105,4 +112,28 @@ const STATUS_STYLES: Record<string, string> = {
 
 export function statusBadgeClass(status: string): string {
     return STATUS_STYLES[status] ?? 'bg-secondary text-muted-foreground border-border';
+}
+
+const ONBOARDING_LABELS: Record<OnboardingState, string> = {
+    invited: 'Invited',
+    invite_expired: 'Invite expired',
+    active: 'Active',
+    wallet_authorized: 'Wallet authorized',
+};
+
+const ONBOARDING_STYLES: Record<OnboardingState, string> = {
+    invited: 'bg-info/12 text-info border-info/25',
+    invite_expired: 'bg-destructive/12 text-destructive border-destructive/25',
+    active: 'bg-warning/12 text-warning border-warning/25',
+    wallet_authorized: 'bg-success/12 text-success border-success/25',
+};
+
+export function onboardingLabel(state: OnboardingState | undefined): string {
+    return state ? ONBOARDING_LABELS[state] : '—';
+}
+
+export function onboardingBadgeClass(state: OnboardingState | undefined): string {
+    return state
+        ? ONBOARDING_STYLES[state]
+        : 'bg-secondary text-muted-foreground border-border';
 }
