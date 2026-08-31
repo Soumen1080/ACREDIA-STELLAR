@@ -1,6 +1,11 @@
+import { createUnsubscribeToken } from './notificationUnsubscribe';
+
 export function getBaseTemplate(title: string, preheader: string, content: string, userId: string) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://acredia.io';
-    
+    // Signed, expiring, user-scoped token (ACREDIA-STELLAR#235) — a bare
+    // userId in the link can no longer mutate anyone's notification settings.
+    const unsubscribeToken = createUnsubscribeToken(userId);
+
     return `
 <!DOCTYPE html>
 <html lang="en">
@@ -35,7 +40,7 @@ export function getBaseTemplate(title: string, preheader: string, content: strin
         </div>
         <div class="footer">
             <p>You received this email because you are a registered user on Acredia.</p>
-            <p>Don't want to receive these emails? <a href="${appUrl}/api/account/notifications/unsubscribe?userId=${userId}">Manage your notification preferences</a>.</p>
+            <p>Don't want to receive these emails? <a href="${appUrl}/api/account/notifications/unsubscribe?userId=${userId}&token=${unsubscribeToken}">Manage your notification preferences</a>.</p>
         </div>
     </div>
 </body>
