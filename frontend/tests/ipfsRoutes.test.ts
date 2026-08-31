@@ -237,4 +237,15 @@ describe('IPFS upload routes', () => {
             expect(mockRequireInstitutionRequest).toHaveBeenCalledTimes(20);
         });
     });
+
+    describe('filename sanitization (Issue #233)', () => {
+        it('strips CRLF, control characters, quotes and path separators', async () => {
+            const { sanitizePinataFilename } = await import('../src/lib/ipfsServer');
+            expect(sanitizePinataFilename('test\r\nInjected: header.pdf')).toBe('test__Injected: header.pdf');
+            expect(sanitizePinataFilename('../../../etc/passwd.png')).toBe('etc_passwd.png');
+            expect(sanitizePinataFilename('file"with"quotes.jpg')).toBe('file_with_quotes.jpg');
+            expect(sanitizePinataFilename('   ')).toBe('credential_file');
+        });
+    });
 });
+
