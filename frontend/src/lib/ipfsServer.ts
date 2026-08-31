@@ -37,6 +37,16 @@ function parsePinataCid(payload: unknown): string {
     return cid.trim();
 }
 
+export function sanitizePinataFilename(name: string): string {
+    // Strip CRLF, non-printable control chars, quotes, and path separators to prevent CRLF injection & header manipulation
+    const sanitized = name
+        .replace(/[\r\n\t\x00-\x1f\x7f-\x9f"/\\]/g, '_')
+        .replace(/^\.+/, '')
+        .trim();
+
+    return sanitized.slice(0, 255) || 'credential_file';
+}
+
 export function validatePinataFile(file: File): string | null {
     if (!ALLOWED_FILE_TYPES.has(file.type)) {
         return 'Invalid file type. Please upload PDF, JPG, or PNG files only.';
@@ -74,9 +84,10 @@ export function validatePinataJson(content: unknown): string | null {
 export async function pinFileToPinata(file: File): Promise<string> {
     const jwt = requirePinataJwt();
     const startedAt = Date.now();
+    const safeFilename = sanitizePinataFilename(file.name);
     const formData = new FormData();
-    formData.append('file', file, file.name);
-    formData.append('pinataMetadata', JSON.stringify({ name: file.name }));
+    formData.append('file', file, safeFilename);
+    formData.append('pinataMetadata', JSON.stringify({ name: safeFilename }));
     formData.append('pinataOptions', JSON.stringify({ cidVersion: 1 }));
 
     const response = await fetch(`${PINATA_API_BASE}/pinFileToIPFS`, {
