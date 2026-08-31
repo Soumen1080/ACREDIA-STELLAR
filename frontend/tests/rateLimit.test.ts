@@ -332,3 +332,57 @@ describe('Upstash store', () => {
         expect(Number.isInteger(result.retryAfter)).toBe(true);
     });
 });
+
+// ─── Limiter Mode (Issue #229) ────────────────────────────────────────────────
+
+import { getRateLimiterMode, reinitRateLimitStore } from '@/lib/rateLimit';
+
+describe('Limiter Mode Reporting (Issue #229)', () => {
+    const saved: Record<string, string | undefined> = {};
+
+    beforeEach(() => {
+        for (const k of ENV_KEYS) saved[k] = process.env[k];
+        for (const k of ENV_KEYS) delete process.env[k];
+        resetRateLimitStore();
+        vi.restoreAllMocks();
+    });
+
+    afterEach(() => {
+        for (const k of ENV_KEYS) {
+            if (typeof saved[k] === 'undefined') delete process.env[k];
+            else process.env[k] = saved[k];
+        }
+    });
+
+    it('reports in-memory-unconfigured when UPSTASH vars are missing', () => {
+        delete process.env.UPSTASH_REDIS_REST_URL;
+        delete process.env.UPSTASH_REDIS_REST_TOKEN;
+        reinitRateLimitStore();
+        
+        expect(getRateLimiterMode()).toBe('in-memory-unconfigured');
+    });
+
+    it('reports distributed after a successful Upstash call', async () => {
+        process.env.UPSTASH_REDIS_REST_URL = 'https://fake';
+        process.env.UPSTASH_REDIS_REST_TOKEN = 'fake';
+        reinitRateLimitStore();
+        
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            new Response(upstashPipelineResponse(1, 60), { status: 200 }),
+        );
+        
+        await checkRateLimit(requestFrom('1.1.1.1'), { prefix: 'test', windowSeconds: 60, maxRequests: 10 });
+        expect(getRateLimiterMode()).toBe('distributed');
+    });
+
+    it('reports in-memory-fallback after a failed Upstash call', async () => {
+        process.env.UPSTASH_REDIS_REST_URL = 'https://fake';
+        process.env.UPSTASH_REDIS_REST_TOKEN = 'fake';
+        reinitRateLimitStore();
+        
+        vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'));
+        
+        await checkRateLimit(requestFrom('2.2.2.2'), { prefix: 'test', windowSeconds: 60, maxRequests: 10 });
+        expect(getRateLimiterMode()).toBe('in-memory-fallback');
+    });
+});

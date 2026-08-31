@@ -18,7 +18,7 @@ import { ConnectWalletNotice } from '@/components/admin/ConnectWalletNotice';
 import { PendingInstitutionsPanel } from '@/components/admin/PendingInstitutionsPanel';
 import { RetentionPanel } from '@/components/admin/RetentionPanel';
 import { AdminGate } from '@/components/admin/AdminGate';
-import { IndexerHealth, VerificationOutcomes } from '@/components/admin/AdminOverviewPanels';
+import { IndexerHealth, VerificationOutcomes, RateLimiterStatus } from '@/components/admin/AdminOverviewPanels';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,6 +45,7 @@ interface AdminStats {
         lastLedger: number | null;
         lastUpdated: string | null;
     };
+    rateLimiterMode?: 'distributed' | 'in-memory-fallback' | 'in-memory-unconfigured';
 }
 
 const EMPTY_STATS: AdminStats = {
@@ -59,6 +60,7 @@ const EMPTY_STATS: AdminStats = {
         resultCounts: {},
     },
     indexer: { lastLedger: null, lastUpdated: null },
+    rateLimiterMode: 'in-memory-unconfigured',
 };
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -287,15 +289,16 @@ function AdminDashboardContent() {
                         </Link>
                     </div>
 
-                    {/* Verification outcomes and indexer position ride along in
+                    {/* Verification outcomes, indexer position, and limiter status ride along in
                         the same /api/admin/stats payload the numbers above come
                         from — no extra request. */}
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                         <VerificationOutcomes
                             counts={stats.verificationActivity.resultCounts}
                             loading={loadingStats}
                         />
                         <IndexerHealth indexer={stats.indexer} loading={loadingStats} />
+                        <RateLimiterStatus mode={stats.rateLimiterMode} loading={loadingStats} />
                     </div>
 
                     {/* A stalled purge means the published privacy policy has

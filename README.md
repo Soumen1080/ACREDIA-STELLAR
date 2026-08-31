@@ -672,6 +672,7 @@ Before deploying to production:
 
 - **Switch to Mainnet**: Set `NEXT_PUBLIC_STELLAR_NETWORK=mainnet` in your production environment variables to point the application to the live Stellar network.
 - **Keep one network switch**: Use only `NEXT_PUBLIC_STELLAR_NETWORK` (`testnet`, `mainnet`, or `custom`). Testnet/Mainnet profiles are boot-time validated and endpoint/passphrase overrides are blocked.
+- **Configure Rate Limiting**: Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in your production environment to enable distributed rate limiting and caching. The public verification endpoint will fail-closed in production if this is not configured.
 - **Update Contract Addresses**: Ensure `NEXT_PUBLIC_CREDENTIAL_NFT_CONTRACT` and `NEXT_PUBLIC_CREDENTIAL_REGISTRY_CONTRACT` are updated to your verified mainnet deployment IDs. (The app will fail to boot if it detects the known testnet contract on mainnet).
 - Use Stellar Public Network values only after contract review and a verified mainnet deployment.
 - Rotate any secret that was pasted into chat, screenshots, logs, browser code, or an issue.

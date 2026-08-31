@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceRoleClient, requireAdminRequest } from '@/lib/serverAuth';
-import { enforceRateLimit } from '@/lib/rateLimit';
+import { enforceRateLimit, getRateLimiterMode } from '@/lib/rateLimit';
 import { VERIFICATION_RESULT_TYPES } from '@/lib/verificationAudit';
 import { structuredLog, captureException } from '@/lib/debug';
 
@@ -164,7 +164,11 @@ export async function GET(request: NextRequest) {
                 indexer: {
                     lastLedger: indexerState?.last_ledger || null,
                     lastUpdated: indexerState?.updated_at || null,
-                }
+                },
+                // Issue #229: exposes which rate-limiting backend is active so
+                // admins can see immediately whether distributed limiting is
+                // engaged or whether the deployment is running per-instance.
+                rateLimiterMode: getRateLimiterMode(),
             },
         });
     } catch (error) {
