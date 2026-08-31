@@ -16,6 +16,13 @@ import {
 } from '@/lib/verificationAudit';
 import { captureException, recordMetric } from '@/lib/debug';
 import { hashApiKey } from '@/lib/apiKey';
+import {
+    getCachedImmutableData,
+    setCachedImmutableData,
+    getCachedRevocationStatus,
+    setCachedRevocationStatus,
+    RESPONSE_CACHE_MAX_AGE_SECONDS,
+} from '@/lib/verificationCache';
 
 export type IntegrityStatus = 'match' | 'mismatch' | 'unavailable';
 
@@ -24,6 +31,8 @@ export interface IntegrityResult {
     cidResolved: boolean;
 }
 
+// Dynamic rendering is required because we read request headers (IP, API key).
+// The response Cache-Control header allows CDN/browser caching of the payload.
 export const dynamic = 'force-dynamic';
 
 const MAX_TOKEN_LENGTH = 128;
@@ -292,13 +301,61 @@ export async function GET(
 
         credentialId = data.id;
 
-        const [onChain, onChainRevoked, issuerAuthorized] = await Promise.all([
-            getCredential(data.token_id),
-            isRevoked(data.token_id),
+        // ------------------------------------------------------------------
+        // Cache layer — Issue #228
+        // Immutable data (on-chain credential + IPFS integrity) is cached with
+        // a long TTL. Revocation status uses a short TTL so that a revocation
+        // event propagates to verifiers within its documented window.
+        // All cache helpers return `null` on a miss or Redis unavailability
+        // so we fall through to the live chain/IPFS path transparently.
+        // ------------------------------------------------------------------
+        const tokenId = data.token_id;
+
+        // 1. Try the immutable cache (skips RPC + IPFS fetch on a hit).
+        const cachedImmutable = await getCachedImmutableData(tokenId);
+        let onChain = cachedImmutable?.onChain ?? null;
+        let integrity = cachedImmutable?.integrity ?? null;
+        const immutableCacheHit = cachedImmutable !== null;
+
+        // 2. Revocation is always re-checked with its own short TTL.
+        let cachedRevoked = await getCachedRevocationStatus(tokenId);
+        const revocationCacheHit = cachedRevoked !== null;
+
+        // 3. On an immutable cache miss, do the real chain + IPFS work.
+        if (!immutableCacheHit) {
+            onChain = await getCredential(tokenId);
+            integrity = await checkIntegrity(
+                onChain?.uri,
+                onChain?.hash,
+                data.metadata_schema_version,
+                data.hash_algorithm,
+            );
+            // Write immutable results to cache in the background — don't block.
+            void setCachedImmutableData(tokenId, {
+                onChain,
+                integrity: integrity ?? { status: 'unavailable', cidResolved: false },
+            });
+        }
+
+        // 4. On a revocation cache miss, fetch live and cache the result.
+        if (!revocationCacheHit) {
+            cachedRevoked = await isRevoked(tokenId);
+            void setCachedRevocationStatus(tokenId, cachedRevoked);
+        }
+        const onChainRevoked = cachedRevoked ?? false;
+
+        // issuerAuthorized is not cached — it's a cheap single Supabase lookup
+        // and is not on the hot path of repeated public verification.
+        const issuerAuthorized =
             data.issuer_wallet_address && typeof isAuthorizedIssuer === 'function'
-                ? isAuthorizedIssuer(data.issuer_wallet_address)
-                : Promise.resolve(false),
-        ]);
+                ? await isAuthorizedIssuer(data.issuer_wallet_address)
+                : false;
+
+        recordMetric('verification.cache.status', 1, {
+            immutableHit: immutableCacheHit,
+            revocationHit: revocationCacheHit,
+            tokenId,
+        });
 
         const dbHash = data.metadata
             ? await deriveCredentialHash(
@@ -330,26 +387,21 @@ export async function GET(
             checks.hashMatch === true &&
             checks.uriMatch === true;
 
+        // integrity is guaranteed non-null here: either from cache or from
+        // the live checkIntegrity() call above. Fall back defensively.
+        const safeIntegrity: IntegrityResult = integrity ?? { status: 'unavailable', cidResolved: false };
+
         const revoked = Boolean(onChainRevoked || data.revoked);
         const verified = onChain !== null && onChainMatch && !revoked;
         const resultType = getResultType(verified, revoked);
 
-        // Recompute the hash of the document actually fetched from IPFS (not
-        // the database's cached copy) and compare it to the on-chain hash —
-        // proves the CID resolves *and* that its content is what was
-        // anchored, independent of `checks.hashMatch` above.
-        const integrity = await checkIntegrity(
-            onChain?.uri,
-            onChain?.hash,
-            data.metadata_schema_version,
-            data.hash_algorithm,
-        );
-
         const mismatchReasons = [
             ...(resultType === 'mismatch' ? getMismatchReasons(checks) : []),
-            ...(integrity.status === 'mismatch' ? ['ipfs_integrity'] : []),
+            ...(safeIntegrity.status === 'mismatch' ? ['ipfs_integrity'] : []),
         ];
 
+        // Audit log is unconditional — every attempt is recorded whether the
+        // result came from cache or from live chain/IPFS reads.
         await logVerificationAttempt(supabase, request, token, resultType, 200, {
             credentialId,
             chain: {
@@ -357,7 +409,7 @@ export async function GET(
                 revoked,
                 match: onChainMatch,
             },
-            integrity,
+            integrity: safeIntegrity,
             mismatchReasons,
             apiKeyContext,
         });
@@ -368,42 +420,54 @@ export async function GET(
 
         const credentialData = data.metadata?.credentialData ?? {};
 
-        return NextResponse.json({
-            success: true,
-            credential: {
-                tokenId: data.token_id,
-                issuedAt: data.issued_at,
-                revoked,
-                revokedAt: data.revoked_at,
-                institutionName: institution?.name ?? credentialData.institutionName ?? null,
-                credentialType: credentialData.credentialType ?? null,
-                degree: credentialData.degree ?? null,
-                major: credentialData.major ?? null,
-                issueDate: credentialData.issueDate ?? null,
-                // Stellar account addresses, not sensitive: already readable
-                // on-chain by anyone who queries this token_id directly.
-                studentWallet: onChain?.student ?? data.student_wallet_address ?? null,
-                institutionWallet: onChain?.issuer ?? data.issuer_wallet_address ?? null,
-                metadataSchemaVersion: data.metadata_schema_version ?? null,
-                hashAlgorithm: data.hash_algorithm ?? null,
-                onChainHash: onChain?.hash ?? null,
-                blockchainHash: data.blockchain_hash ?? null,
-                ipfsHash: data.ipfs_hash ?? null,
+        // HTTP Cache-Control: CDN/browsers may cache this public response for the
+        // same duration as the revocation TTL — ensuring a revocation event
+        // propagates to all cached copies within the documented window.
+        // stale-while-revalidate lets CDNs serve the old response while they
+        // refresh it in the background, preventing latency spikes on expiry.
+        const cacheControl = `public, s-maxage=${RESPONSE_CACHE_MAX_AGE_SECONDS}, stale-while-revalidate=30`;
+
+        return NextResponse.json(
+            {
+                success: true,
+                credential: {
+                    tokenId: data.token_id,
+                    issuedAt: data.issued_at,
+                    revoked,
+                    revokedAt: data.revoked_at,
+                    institutionName: institution?.name ?? credentialData.institutionName ?? null,
+                    credentialType: credentialData.credentialType ?? null,
+                    degree: credentialData.degree ?? null,
+                    major: credentialData.major ?? null,
+                    issueDate: credentialData.issueDate ?? null,
+                    // Stellar account addresses, not sensitive: already readable
+                    // on-chain by anyone who queries this token_id directly.
+                    studentWallet: onChain?.student ?? data.student_wallet_address ?? null,
+                    institutionWallet: onChain?.issuer ?? data.issuer_wallet_address ?? null,
+                    metadataSchemaVersion: data.metadata_schema_version ?? null,
+                    hashAlgorithm: data.hash_algorithm ?? null,
+                    onChainHash: onChain?.hash ?? null,
+                    blockchainHash: data.blockchain_hash ?? null,
+                    ipfsHash: data.ipfs_hash ?? null,
+                },
+                verification: {
+                    verified,
+                    revoked,
+                    onChainMatch,
+                    onChainFound: onChain !== null,
+                    issuerAuthorized,
+                    issuerStatus: issuerAuthorized ? 'active' : 'revoked',
+                    // Distinct from `revoked`/`onChainFound`: proves the actual
+                    // IPFS-hosted document — not the DB's cached copy — hashes to
+                    // the on-chain value. 'unavailable' means the CID couldn't be
+                    // resolved/checked, not that anything is wrong.
+                    integrity: safeIntegrity,
+                },
             },
-            verification: {
-                verified,
-                revoked,
-                onChainMatch,
-                onChainFound: onChain !== null,
-                issuerAuthorized,
-                issuerStatus: issuerAuthorized ? 'active' : 'revoked',
-                // Distinct from `revoked`/`onChainFound`: proves the actual
-                // IPFS-hosted document — not the DB's cached copy — hashes to
-                // the on-chain value. 'unavailable' means the CID couldn't be
-                // resolved/checked, not that anything is wrong.
-                integrity,
+            {
+                headers: { 'Cache-Control': cacheControl },
             },
-        });
+        );
     } catch (err: unknown) {
         if (err instanceof ContractConfigurationError) {
             captureException(err, { requestId, context: 'GET /api/verify/[token]' });
