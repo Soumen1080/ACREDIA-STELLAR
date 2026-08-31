@@ -6,7 +6,8 @@ import {
 } from '@/lib/serverAuth';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { toCsv } from '@/lib/analyticsAggregation';
-import { captureException, structuredLog } from '@/lib/debug';
+import { captureException } from '@/lib/debug';
+import { resolveInstitutionForUser } from '@/lib/institutionMembership';
 
 // CSV export streams the full credential set; treat it as expensive as analytics.
 const INSTITUTION_EXPORT_IP_LIMIT = {
@@ -49,27 +50,16 @@ export async function GET(request: NextRequest) {
                   throw new Error('Service role key required');
               })();
 
-        const { data: inst, error: instErr } = await supabase
-            .from('institutions')
-            .select('id')
-            .eq('auth_user_id', authCheck.userId)
-            .maybeSingle();
+        const membership = await resolveInstitutionForUser(supabase, authCheck.userId);
 
-        if (instErr) {
-            structuredLog('ERROR', 'Error fetching institution for export', requestId, {
-                error: instErr,
-            });
-            return NextResponse.json(
-                { success: false, error: 'Failed to load institution profile' },
-                { status: 500 },
-            );
-        }
-        if (!inst?.id) {
+        if (!membership) {
             return NextResponse.json(
                 { success: false, error: 'Institution not found' },
                 { status: 404 },
             );
         }
+
+        const inst = { id: membership.institutionId };
 
         const { data: credentials, error: credErr } = await supabase
             .from('credentials')

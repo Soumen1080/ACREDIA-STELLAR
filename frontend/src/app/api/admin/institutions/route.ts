@@ -382,8 +382,11 @@ export async function POST(request: NextRequest) {
             {
                 institution_id: institution.id,
                 auth_user_id: authUserId,
-                role: 'poc',
-                is_active: true,
+                role: 'owner',
+                // `invited` until they accept — the resolver only grants access
+                // to active members, so the invite is what activates them.
+                status: 'invited',
+                invited_by: adminCheck.userId,
             },
             { onConflict: 'institution_id,auth_user_id' },
         );

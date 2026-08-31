@@ -139,7 +139,7 @@ export async function POST(
             // Also mark as inactive in institution_users
             await supabase
                 .from('institution_users')
-                .update({ is_active: false })
+                .update({ status: 'deactivated' })
                 .eq('institution_id', institution.id)
                 .eq('auth_user_id', oldAuthUserId);
         }
@@ -244,8 +244,9 @@ export async function POST(
             {
                 institution_id: institution.id,
                 auth_user_id: newAuthUserId,
-                role: 'poc',
-                is_active: true,
+                role: 'owner',
+                status: 'active',
+                invited_by: adminCheck.userId,
             },
             { onConflict: 'institution_id,auth_user_id' },
         );

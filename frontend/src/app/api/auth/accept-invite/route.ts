@@ -38,11 +38,25 @@ export async function POST(request: NextRequest) {
 
         const supabase = getServiceRoleClient();
 
-        const { data: institution, error: institutionError } = await supabase
-            .from('institutions')
-            .select('id, name, invited_at, invite_expires_at, invite_accepted_at')
+        // The invited member's membership row is created `invited` at
+        // provisioning time, so resolve through it rather than the deprecated
+        // single-login column.
+        const { data: membershipRow } = await supabase
+            .from('institution_users')
+            .select('institution_id')
             .eq('auth_user_id', authCheck.userId)
+            .order('created_at', { ascending: true })
+            .limit(1)
             .maybeSingle();
+
+        const institutionQuery = supabase
+            .from('institutions')
+            .select('id, name, invited_at, invite_expires_at, invite_accepted_at');
+
+        const { data: institution, error: institutionError } = await (membershipRow?.institution_id
+            ? institutionQuery.eq('id', membershipRow.institution_id)
+            : institutionQuery.eq('auth_user_id', authCheck.userId)
+        ).maybeSingle();
 
         if (institutionError) {
             structuredLog('ERROR', 'Failed to load institution for invite acceptance', requestId, {
@@ -87,6 +101,21 @@ export async function POST(request: NextRequest) {
                 { success: false, error: 'Failed to complete onboarding' },
                 { status: 500 },
             );
+        }
+
+        // Activate the membership so the POC can actually act. Until now the
+        // row exists but is not `active`, so the resolver denies them.
+        const { error: membershipError } = await supabase
+            .from('institution_users')
+            .update({ status: 'active' })
+            .eq('institution_id', institution.id)
+            .eq('auth_user_id', authCheck.userId);
+
+        if (membershipError) {
+            structuredLog('WARN', 'Failed to activate the membership on invite acceptance', requestId, {
+                error: membershipError,
+                institutionId: institution.id,
+            });
         }
 
         const { error: auditError } = await supabase.from('admin_audit_logs').insert({

@@ -3,6 +3,7 @@ import { getServiceRoleClient, requireAdminRequest } from '@/lib/serverAuth';
 import { verifyAdminAuthorizationTransaction } from '@/lib/adminAuthorizationVerification';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { structuredLog, captureException } from '@/lib/debug';
+import { resolveInstitutionOwnerId } from '@/lib/institutionMembership';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,13 +98,13 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            // Enqueue verified notification
-            const { data: userProfile } = await supabase
-                .from('profiles')
-                .select('email')
-                .eq('id', institution.auth_user_id)
-                .single();
-                
+            // Enqueue verified notification to the institution's owner.
+            const ownerId = await resolveInstitutionOwnerId(supabase, institution.id, institution.auth_user_id);
+
+            const { data: userProfile } = ownerId
+                ? await supabase.from('profiles').select('email').eq('id', ownerId).single()
+                : { data: null };
+
             if (userProfile?.email) {
                 await supabase.from('jobs').insert({
                     name: 'send_email',
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
                         to: userProfile.email,
                         subject: 'Institution Verified',
                         type: 'verified',
-                        userId: institution.auth_user_id,
+                        userId: ownerId,
                         payload: {
                             institutionName: institution.name
                         }

@@ -11,7 +11,6 @@ const {
     mockMaybeSingle,
     mockUpdate,
     mockFirstEqAfterUpdate,
-    mockSecondEqAfterUpdate,
     mockSelectAfterUpdate,
     mockSingleAfterUpdate,
 } = vi.hoisted(() => ({
@@ -23,7 +22,6 @@ const {
     mockMaybeSingle: vi.fn(),
     mockUpdate: vi.fn(),
     mockFirstEqAfterUpdate: vi.fn(),
-    mockSecondEqAfterUpdate: vi.fn(),
     mockSelectAfterUpdate: vi.fn(),
     mockSingleAfterUpdate: vi.fn(),
 }));
@@ -51,8 +49,15 @@ function request(body: unknown): NextRequest {
 describe('institution link wallet route', () => {
     const walletAddress = Keypair.random().publicKey();
 
+    let membershipRow: Record<string, unknown> | null;
+
     beforeEach(() => {
         vi.clearAllMocks();
+        membershipRow = {
+            institution_id: 'institution-1',
+            role: 'owner',
+            status: 'active',
+        };
         mockRequireAuthenticatedRequest.mockResolvedValue({ ok: true, userId: 'institution-user' });
         mockHasServiceRoleEnv.mockReturnValue(true);
         mockEqAfterFind.mockReturnValue({ maybeSingle: mockMaybeSingle });
@@ -60,21 +65,37 @@ describe('institution link wallet route', () => {
             data: { id: 'institution-1', wallet_address: null },
             error: null,
         });
+        // The update is now scoped by institution id alone — membership, not a
+        // repeated auth_user_id filter, is what proves ownership.
         mockUpdate.mockReturnValue({ eq: mockFirstEqAfterUpdate });
-        mockFirstEqAfterUpdate.mockReturnValue({ eq: mockSecondEqAfterUpdate });
-        mockSecondEqAfterUpdate.mockReturnValue({ select: mockSelectAfterUpdate });
+        mockFirstEqAfterUpdate.mockReturnValue({ select: mockSelectAfterUpdate });
         mockSelectAfterUpdate.mockReturnValue({ single: mockSingleAfterUpdate });
         mockSingleAfterUpdate.mockResolvedValue({
             data: { id: 'institution-1', wallet_address: walletAddress },
             error: null,
         });
+
         mockGetServiceRoleClient.mockReturnValue({
-            from: vi.fn(() => ({
-                select: vi.fn(() => ({
-                    eq: mockEqAfterFind,
-                })),
-                update: mockUpdate,
-            })),
+            from: vi.fn((table: string) => {
+                if (table === 'institution_users') {
+                    const builder: Record<string, unknown> = {};
+                    for (const method of ['select', 'eq', 'in', 'order', 'limit']) {
+                        builder[method] = () => builder;
+                    }
+                    builder.maybeSingle = async () => ({
+                        data: membershipRow,
+                        error: null,
+                    });
+                    return builder;
+                }
+
+                return {
+                    select: vi.fn(() => ({
+                        eq: mockEqAfterFind,
+                    })),
+                    update: mockUpdate,
+                };
+            }),
         });
     });
 
@@ -88,7 +109,7 @@ describe('institution link wallet route', () => {
             walletAddress,
             changed: true,
         });
-        expect(mockEqAfterFind).toHaveBeenCalledWith('auth_user_id', 'institution-user');
+        expect(mockEqAfterFind).toHaveBeenCalledWith('id', 'institution-1');
         expect(mockUpdate).toHaveBeenCalledWith({
             wallet_address: walletAddress,
             verified: false,
@@ -96,10 +117,6 @@ describe('institution link wallet route', () => {
             authorization_tx_hash: null,
         });
         expect(mockFirstEqAfterUpdate).toHaveBeenCalledWith('id', 'institution-1');
-        expect(mockSecondEqAfterUpdate).toHaveBeenCalledWith(
-            'auth_user_id',
-            'institution-user',
-        );
     });
 
     it('does not reset authorization when the same wallet is already linked', async () => {
@@ -143,6 +160,34 @@ describe('institution link wallet route', () => {
         expect(payload).toEqual({
             success: false,
             error: 'Institution profile not found',
+        });
+        expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('requires a membership, not merely the deprecated owner column', async () => {
+        membershipRow = null;
+        mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+        const response = await POST(request({ walletAddress }));
+
+        expect(response.status).toBe(404);
+        expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('refuses a read-only member, enforcing the role server-side', async () => {
+        membershipRow = {
+            institution_id: 'institution-1',
+            role: 'viewer',
+            status: 'active',
+        };
+
+        const response = await POST(request({ walletAddress }));
+        const payload = await response.json();
+
+        expect(response.status).toBe(403);
+        expect(payload).toEqual({
+            success: false,
+            error: 'Your role does not permit changing the wallet',
         });
         expect(mockUpdate).not.toHaveBeenCalled();
     });

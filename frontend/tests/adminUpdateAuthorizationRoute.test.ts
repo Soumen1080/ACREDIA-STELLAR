@@ -47,14 +47,35 @@ describe('admin update authorization route', () => {
             error: null,
         });
         mockGetServiceRoleClient.mockReturnValue({
-            from: vi.fn(() => ({
-                select: vi.fn(() => ({
-                    eq: vi.fn(() => ({
-                        single: mockSingle,
+            from: vi.fn((table: string) => {
+                // The owner to notify is resolved through the membership table
+                // since Issue #238, whose query chains further than the
+                // institution lookup does.
+                if (table === 'institution_users') {
+                    const builder: Record<string, unknown> = {};
+                    for (const method of ['select', 'eq', 'in', 'order', 'limit']) {
+                        builder[method] = () => builder;
+                    }
+                    builder.maybeSingle = async () => ({
+                        data: { auth_user_id: 'owner-user', role: 'owner' },
+                        error: null,
+                    });
+                    return builder;
+                }
+
+                if (table === 'jobs') {
+                    return { insert: vi.fn(async () => ({ error: null })) };
+                }
+
+                return {
+                    select: vi.fn(() => ({
+                        eq: vi.fn(() => ({
+                            single: mockSingle,
+                        })),
                     })),
-                })),
-                update: mockUpdate,
-            })),
+                    update: mockUpdate,
+                };
+            }),
         });
     });
 

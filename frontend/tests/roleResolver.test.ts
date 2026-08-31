@@ -13,34 +13,51 @@ type MockState = {
 };
 
 function createMockClient(state: MockState) {
+    // Institution affiliation is resolved through `institution_users` since
+    // Issue #238, so the stub answers for it as well and every builder method
+    // chains.
+    const makeBuilder = (table: string) => {
+        const resolve = async () => {
+            if (table === 'profiles') {
+                return {
+                    data: state.profileRole ? { role: state.profileRole } : null,
+                    error: null,
+                };
+            }
+            if (table === 'institution_users') {
+                return {
+                    data: state.hasInstitutionRow
+                        ? { institution_id: 'inst-1', role: 'owner', status: 'active' }
+                        : null,
+                    error: null,
+                };
+            }
+            if (table === 'institutions') {
+                return {
+                    data: state.hasInstitutionRow ? { id: 'inst-1' } : null,
+                    error: null,
+                };
+            }
+            if (table === 'students') {
+                return {
+                    data: state.hasStudentRow ? { id: 'stu-1' } : null,
+                    error: null,
+                };
+            }
+            return { data: null, error: null };
+        };
+
+        const builder: Record<string, unknown> = {};
+        for (const method of ['select', 'eq', 'in', 'order', 'limit']) {
+            builder[method] = () => builder;
+        }
+        builder.maybeSingle = resolve;
+        builder.single = resolve;
+        return builder;
+    };
+
     return {
-        from: (table: string) => ({
-            select: () => ({
-                eq: () => ({
-                    maybeSingle: async () => {
-                        if (table === 'profiles') {
-                            return {
-                                data: state.profileRole ? { role: state.profileRole } : null,
-                                error: null,
-                            };
-                        }
-                        if (table === 'institutions') {
-                            return {
-                                data: state.hasInstitutionRow ? { id: 'inst-1' } : null,
-                                error: null,
-                            };
-                        }
-                        if (table === 'students') {
-                            return {
-                                data: state.hasStudentRow ? { id: 'stu-1' } : null,
-                                error: null,
-                            };
-                        }
-                        return { data: null, error: null };
-                    },
-                }),
-            }),
-        }),
+        from: (table: string) => makeBuilder(table),
     } as unknown as SupabaseClient;
 }
 

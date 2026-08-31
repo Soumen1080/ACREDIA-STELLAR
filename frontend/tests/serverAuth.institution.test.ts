@@ -27,33 +27,51 @@ vi.mock('@supabase/supabase-js', () => ({
         from: vi.fn((table: string) => {
             queriedTables.push({ key, table });
 
-            return {
-                select: vi.fn(() => ({
-                    eq: vi.fn(() => ({
-                        maybeSingle: vi.fn(async () => {
-                            if (table === 'profiles') {
-                                return {
-                                    data: state.profileRole ? { role: state.profileRole } : null,
-                                    error: null,
-                                };
-                            }
-                            if (table === 'institutions') {
-                                return {
-                                    data: state.institutionId ? { id: state.institutionId } : null,
-                                    error: null,
-                                };
-                            }
-                            if (table === 'students') {
-                                return {
-                                    data: state.hasStudentRow ? { id: 'student-1' } : null,
-                                    error: null,
-                                };
-                            }
-                            return { data: null, error: null };
-                        }),
-                    })),
-                })),
+            // Chainable stub: the membership resolver strings together
+            // select/eq/eq/order/limit before resolving, so every builder
+            // method has to return the builder itself.
+            const resolve = async () => {
+                if (table === 'profiles') {
+                    return {
+                        data: state.profileRole ? { role: state.profileRole } : null,
+                        error: null,
+                    };
+                }
+                if (table === 'institution_users') {
+                    return {
+                        data: state.institutionId
+                            ? {
+                                  institution_id: state.institutionId,
+                                  role: 'owner',
+                                  status: 'active',
+                              }
+                            : null,
+                        error: null,
+                    };
+                }
+                if (table === 'institutions') {
+                    return {
+                        data: state.institutionId ? { id: state.institutionId } : null,
+                        error: null,
+                    };
+                }
+                if (table === 'students') {
+                    return {
+                        data: state.hasStudentRow ? { id: 'student-1' } : null,
+                        error: null,
+                    };
+                }
+                return { data: null, error: null };
             };
+
+            const builder: Record<string, unknown> = {};
+            for (const method of ['select', 'eq', 'in', 'order', 'limit']) {
+                builder[method] = vi.fn(() => builder);
+            }
+            builder.maybeSingle = vi.fn(resolve);
+            builder.single = vi.fn(resolve);
+
+            return builder;
         }),
     })),
 }));

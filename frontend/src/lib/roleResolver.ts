@@ -22,6 +22,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { User } from '@supabase/supabase-js';
 import type { AppRole, RoleState } from '@/types';
 import { getE2eState } from './e2e';
+import { resolveInstitutionIdForUser } from './institutionMembership';
 // ---------------------------------------------------------------------------
 // Core resolver (works with any Supabase client — browser or server)
 // ---------------------------------------------------------------------------
@@ -142,6 +143,12 @@ async function hasRowIn(
     table: 'institutions' | 'students',
     userId: string,
 ): Promise<boolean> {
+    // Institution affiliation lives in the membership table since Issue #238;
+    // `students` still carries the user column directly.
+    if (table === 'institutions') {
+        return (await resolveInstitutionIdForUser(client, userId)) !== null;
+    }
+
     const { data } = await client.from(table).select('id').eq('auth_user_id', userId).maybeSingle();
 
     return !!data?.id;

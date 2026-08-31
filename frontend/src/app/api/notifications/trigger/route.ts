@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceRoleClient, requireAuthenticatedRequest } from '@/lib/serverAuth';
 import { structuredLog } from '@/lib/debug';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { canWrite, resolveInstitutionForUser } from '@/lib/institutionMembership';
 
 // Coarse per-IP guard against anonymous floods before auth runs.
 const NOTIFICATIONS_TRIGGER_IP_LIMIT = {
@@ -44,11 +45,26 @@ export async function POST(request: NextRequest) {
 
         const supabase = getServiceRoleClient();
 
-        // Verify institution and credential
+        // Verify institution membership and credential
+        const membership = await resolveInstitutionForUser(supabase, authCheck.userId);
+
+        if (!membership) {
+            return NextResponse.json({ success: false, error: 'Institution not found' }, { status: 404 });
+        }
+
+        // Issuance and revocation notifications follow a write action, so
+        // read-only members may not send them.
+        if (!canWrite(membership.role)) {
+            return NextResponse.json(
+                { success: false, error: 'Your role does not permit sending notifications' },
+                { status: 403 },
+            );
+        }
+
         const { data: institution } = await supabase
             .from('institutions')
             .select('id, name')
-            .eq('auth_user_id', authCheck.userId)
+            .eq('id', membership.institutionId)
             .single();
 
         if (!institution) {

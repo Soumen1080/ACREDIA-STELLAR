@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import type { NextRequest } from 'next/server';
 import { resolveUserRole } from './roleResolver';
 import { runtimeConfig, serverRuntimeConfig } from './runtimeConfig';
+import { resolveInstitutionIdForUser } from './institutionMembership';
 
 type AuthenticatedRequest = {
     ok: true;
@@ -248,17 +249,14 @@ export async function requireInstitutionRequest(
     }
 
     // Best-effort: callers use this to scope uploads to the issuing institution.
-    // A missing row is not fatal — `profiles.role` already established the role.
-    const { data: institution } = await client
-        .from('institutions')
-        .select('id')
-        .eq('auth_user_id', authCheck.userId)
-        .maybeSingle();
+    // A missing membership is not fatal — `profiles.role` already established
+    // the role.
+    const institutionId = await resolveInstitutionIdForUser(client, authCheck.userId);
 
     return {
         ok: true,
         userId: authCheck.userId,
-        institutionId: (institution?.id as string | undefined) ?? null,
+        institutionId,
     };
 }
 

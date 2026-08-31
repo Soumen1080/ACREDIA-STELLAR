@@ -6,7 +6,8 @@ import {
 } from '@/lib/serverAuth';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { last12Months, groupByMonth, fillMonths, topVerified } from '@/lib/analyticsAggregation';
-import { captureException, structuredLog } from '@/lib/debug';
+import { captureException } from '@/lib/debug';
+import { resolveInstitutionForUser } from '@/lib/institutionMembership';
 
 // Analytics aggregates the full credential + verification log set for an institution.
 // Each request is relatively expensive, so limits are tighter than the credential list.
@@ -50,27 +51,16 @@ export async function GET(request: NextRequest) {
                   throw new Error('Service role key required');
               })();
 
-        const { data: inst, error: instErr } = await supabase
-            .from('institutions')
-            .select('id')
-            .eq('auth_user_id', authCheck.userId)
-            .maybeSingle();
+        const membership = await resolveInstitutionForUser(supabase, authCheck.userId);
 
-        if (instErr) {
-            structuredLog('ERROR', 'Error fetching institution for analytics', requestId, {
-                error: instErr,
-            });
-            return NextResponse.json(
-                { success: false, error: 'Failed to load institution profile' },
-                { status: 500 },
-            );
-        }
-        if (!inst?.id) {
+        if (!membership) {
             return NextResponse.json(
                 { success: false, error: 'Institution not found' },
                 { status: 404 },
             );
         }
+
+        const inst = { id: membership.institutionId };
 
         // Fetch credentials — lightweight select, no pagination (analytics needs full set)
         // TODO: swap this query to the indexer once issue #11 is implemented
