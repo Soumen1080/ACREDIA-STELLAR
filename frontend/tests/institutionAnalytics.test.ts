@@ -34,12 +34,15 @@ function makeRequest(): NextRequest {
 function makeSupabase() {
     return {
         from: vi.fn((table: string) => {
-            if (table === 'institutions') {
-                return {
-                    select: () => ({
-                        eq: () => ({ maybeSingle: mockInstMaybeSingle }),
-                    }),
-                };
+            // Institution resolution goes through the membership table since
+            // Issue #238; `mockInstMaybeSingle` still supplies the row.
+            if (table === 'institution_users' || table === 'institutions') {
+                const builder: Record<string, unknown> = {};
+                for (const method of ['select', 'eq', 'in', 'order', 'limit']) {
+                    builder[method] = () => builder;
+                }
+                builder.maybeSingle = mockInstMaybeSingle;
+                return builder;
             }
             if (table === 'credentials') {
                 return {

@@ -5,7 +5,8 @@ import {
     requireAuthenticatedRequest,
 } from '@/lib/serverAuth';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { structuredLog, captureException } from '@/lib/debug';
+import { captureException } from '@/lib/debug';
+import { resolveInstitutionForUser } from '@/lib/institutionMembership';
 
 // Coarse per-IP guard applied before auth to prevent anonymous floods from
 // driving Supabase token verification on this potentially expensive query.
@@ -49,27 +50,17 @@ export async function GET(request: NextRequest) {
             ? getServiceRoleClient()
             : (() => { throw new Error('Service role key required'); })();
 
-        // ── Resolve institution row ────────────────────────────────────────────
-        const { data: institutionRow, error: instError } = await supabase
-            .from('institutions')
-            .select('id')
-            .eq('auth_user_id', authCheck.userId)
-            .maybeSingle();
+        // ── Resolve institution membership ─────────────────────────────────────
+        const membership = await resolveInstitutionForUser(supabase, authCheck.userId);
 
-        if (instError) {
-            structuredLog('ERROR', 'Error fetching institution row', requestId, { error: instError });
-            return NextResponse.json(
-                { success: false, error: 'Failed to load institution profile' },
-                { status: 500 }
-            );
-        }
-
-        if (!institutionRow?.id) {
+        if (!membership) {
             return NextResponse.json(
                 { success: false, error: 'Institution not found' },
                 { status: 404 }
             );
         }
+
+        const institutionRow = { id: membership.institutionId };
 
         // ── Pagination & filter params ─────────────────────────────────────────
         const { searchParams } = new URL(request.url);

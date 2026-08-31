@@ -8,6 +8,7 @@ import {
 } from '@/lib/serverAuth';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { structuredLog, captureException } from '@/lib/debug';
+import { canWrite, resolveInstitutionForUser } from '@/lib/institutionMembership';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,10 +61,28 @@ export async function POST(request: NextRequest) {
             ? getServiceRoleClient()
             : createUserScopedServerClient(getAccessToken(request));
 
+        const membership = await resolveInstitutionForUser(supabase, authCheck.userId);
+
+        if (!membership) {
+            return NextResponse.json(
+                { success: false, error: 'Institution profile not found' },
+                { status: 404 },
+            );
+        }
+
+        // Linking a wallet re-scopes every credential the institution issues,
+        // so it is a write action: read-only members may not perform it.
+        if (!canWrite(membership.role)) {
+            return NextResponse.json(
+                { success: false, error: 'Your role does not permit changing the wallet' },
+                { status: 403 },
+            );
+        }
+
         const { data: institution, error: findError } = await supabase
             .from('institutions')
             .select('id, wallet_address')
-            .eq('auth_user_id', authCheck.userId)
+            .eq('id', membership.institutionId)
             .maybeSingle();
 
         if (findError) {
@@ -98,7 +117,6 @@ export async function POST(request: NextRequest) {
                 authorization_tx_hash: null,
             })
             .eq('id', institution.id)
-            .eq('auth_user_id', authCheck.userId)
             .select('id, wallet_address')
             .single();
 

@@ -6,6 +6,7 @@ import { captureException, debugLog, debugWarn } from '@/lib/debug';
 import { safeGetSession, supabase } from '@/lib/supabase';
 import { useStellarAccount } from '@/contexts/StellarContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { resolveInstitutionIdForUser } from '@/lib/institutionMembership';
 
 export interface InstitutionProfile {
     /** Empty until the institution row has been loaded or created. */
@@ -54,11 +55,15 @@ export function useInstitutionProfile(): InstitutionProfile {
             }
 
             try {
-                const { data, error } = await supabase
-                    .from('institutions')
-                    .select('id, wallet_address, status')
-                    .eq('auth_user_id', user.id)
-                    .maybeSingle();
+                const institutionId = await resolveInstitutionIdForUser(supabase, user.id);
+
+                const { data, error } = institutionId
+                    ? await supabase
+                          .from('institutions')
+                          .select('id, wallet_address, status')
+                          .eq('id', institutionId)
+                          .maybeSingle()
+                    : { data: null, error: null };
 
                 if (error) {
                     captureException(error, { context: 'fetchInstitutionId' });
@@ -88,6 +93,17 @@ export function useInstitutionProfile(): InstitutionProfile {
                     ])
                     .select('id, wallet_address, status')
                     .single();
+
+                if (!createError && newInstitution?.id) {
+                    await supabase.from('institution_users').insert([
+                        {
+                            institution_id: newInstitution.id,
+                            auth_user_id: user.id,
+                            role: 'owner',
+                            status: 'active',
+                        },
+                    ]);
+                }
 
                 if (createError) {
                     captureException(createError, { context: 'createInstitution' });

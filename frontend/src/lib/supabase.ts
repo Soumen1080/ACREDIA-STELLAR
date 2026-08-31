@@ -8,6 +8,7 @@ const supabaseUrl = runtimeConfig.supabase.url;
 const supabaseAnonKey = runtimeConfig.supabase.anonKey;
 
 import { debugWarn } from './debug';
+import { resolveInstitutionIdForUser } from './institutionMembership';
 
 if (!supabaseUrl || !supabaseAnonKey) {
     if (!runtimeConfig.isProduction) {
@@ -134,7 +135,23 @@ export async function signUp(email: string, password: string, options?: PublicSi
         if (role === 'student') {
             await supabase.from('students').insert([{ auth_user_id: userId, name, email }]);
         } else if (role === 'institution') {
-            await supabase.from('institutions').insert([{ auth_user_id: userId, name, email }]);
+            const { data: institution } = await supabase
+                .from('institutions')
+                .insert([{ auth_user_id: userId, name, email }])
+                .select('id')
+                .single();
+
+            // The membership row, not the column, is what grants access.
+            if (institution?.id) {
+                await supabase.from('institution_users').insert([
+                    {
+                        institution_id: institution.id,
+                        auth_user_id: userId,
+                        role: 'owner',
+                        status: 'active',
+                    },
+                ]);
+            }
         }
     }
 
@@ -256,14 +273,32 @@ export const dbHelpers = {
             .insert([{ auth_user_id: userId, name, email }])
             .select()
             .single();
+
+        if (!error && data?.id) {
+            await supabase.from('institution_users').insert([
+                {
+                    institution_id: data.id,
+                    auth_user_id: userId,
+                    role: 'owner',
+                    status: 'active',
+                },
+            ]);
+        }
+
         return { data, error };
     },
 
     async getInstitution(userId: string) {
+        const institutionId = await resolveInstitutionIdForUser(supabase, userId);
+
+        if (!institutionId) {
+            return { data: null, error: null };
+        }
+
         const { data, error } = await supabase
             .from('institutions')
             .select('*')
-            .eq('auth_user_id', userId)
+            .eq('id', institutionId)
             .single();
         return { data, error };
     },
