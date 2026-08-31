@@ -14,6 +14,9 @@ const ADMIN_RECOVERY_LINK_RATE_LIMIT = {
 
 const idSchema = z.string().uuid();
 
+/** Matches the invite lifetime used when an institution is first provisioned. */
+const INVITE_TTL_DAYS = 7;
+
 const requestSchema = z.object({
     type: z.enum(['recovery', 'invite']).default('recovery'),
     reason: z.string().max(500).optional(),
@@ -79,7 +82,7 @@ export async function POST(
         // 1. Fetch institution
         const { data: institution, error: institutionError } = await supabase
             .from('institutions')
-            .select('id, name, email, auth_user_id')
+            .select('id, name, email, auth_user_id, invited_at')
             .eq('id', parsedId.data)
             .maybeSingle();
 
@@ -110,9 +113,14 @@ export async function POST(
 
         // 2. Determine redirect destination
         const origin = request.nextUrl.origin || 'http://localhost:3000';
-        const redirectTo = `${origin}/auth/reset-password?next=/dashboard`;
-
         const linkType = parsedBody.data.type;
+
+        // An invite lands on the acceptance page (POC sets a first password);
+        // a recovery link lands on the ordinary reset flow.
+        const redirectTo =
+            linkType === 'invite'
+                ? `${origin}/auth/accept-invite?next=/dashboard`
+                : `${origin}/auth/reset-password?next=/dashboard`;
 
         // 3. Generate single-use link via Supabase Auth Admin API
         const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -142,9 +150,41 @@ export async function POST(
 
         const actionLink = linkData.properties.action_link;
 
-        // 4. Record audit log
-        const auditAction =
-            linkType === 'invite' ? 'generate_invite_link' : 'generate_recovery_link';
+        // 4. Advance the invite window. Supabase already invalidated the prior
+        //    token when it generated this one, so the stored expiry must follow
+        //    the new link rather than the superseded one.
+        const isRegeneration = linkType === 'invite' && Boolean(institution.invited_at);
+        let inviteExpiresAt: string | null = null;
+
+        if (linkType === 'invite') {
+            const invitedAt = new Date();
+            inviteExpiresAt = new Date(
+                invitedAt.getTime() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000,
+            ).toISOString();
+
+            const { error: inviteUpdateError } = await supabase
+                .from('institutions')
+                .update({
+                    invited_at: invitedAt.toISOString(),
+                    invite_expires_at: inviteExpiresAt,
+                    invite_accepted_at: null,
+                })
+                .eq('id', institution.id);
+
+            if (inviteUpdateError) {
+                structuredLog('WARN', 'Failed to record the new invite window', requestId, {
+                    error: inviteUpdateError,
+                    institutionId: institution.id,
+                });
+            }
+        }
+
+        // 5. Record audit log
+        const auditAction = isRegeneration
+            ? 'regenerate_invite_link'
+            : linkType === 'invite'
+              ? 'generate_invite_link'
+              : 'generate_recovery_link';
 
         const { error: auditError } = await supabase.from('admin_audit_logs').insert({
             action: auditAction,
@@ -156,7 +196,9 @@ export async function POST(
                 reason: parsedBody.data.reason || 'Admin fallback link generation',
                 linkType,
                 singleUse: true,
-                expiresInHours: 24,
+                regenerated: isRegeneration,
+                expiresInHours: linkType === 'invite' ? INVITE_TTL_DAYS * 24 : 24,
+                inviteExpiresAt,
             },
         });
 
@@ -178,7 +220,8 @@ export async function POST(
             link: actionLink,
             type: linkType,
             email: institution.email,
-            expiresInHours: 24,
+            expiresInHours: linkType === 'invite' ? INVITE_TTL_DAYS * 24 : 24,
+            inviteExpiresAt,
             message: `Single-use ${linkType} link generated. Any previously generated link has been invalidated.`,
         });
     } catch (error) {
