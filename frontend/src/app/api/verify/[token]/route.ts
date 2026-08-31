@@ -9,7 +9,7 @@ import {
 } from '@/lib/contractReads';
 import { deriveCredentialHash } from '@/lib/credentialHash';
 import { fetchJsonFromIpfs } from '@/lib/ipfsServer';
-import { enforceRateLimit } from '@/lib/rateLimit';
+import { enforceRateLimit, getRateLimiterMode } from '@/lib/rateLimit';
 import {
     writeVerificationAuditLog,
     type VerificationResultType,
@@ -39,8 +39,14 @@ const MAX_TOKEN_LENGTH = 128;
 
 const VERIFY_RATE_LIMIT = {
     windowSeconds: 60,
-    maxRequests: 10,
+    maxRequests: 60,
     prefix: 'verify',
+} as const;
+
+const VERIFY_API_KEY_RATE_LIMIT = {
+    windowSeconds: 60,
+    maxRequests: 600,
+    prefix: 'verify-apikey',
 } as const;
 
 type ServiceRoleClient = ReturnType<typeof getServiceRoleClient>;
@@ -234,10 +240,28 @@ export async function GET(
             apiKeyContext = { id: keyData.id, name: keyData.name };
         }
 
-        const rateLimitResponse = await enforceRateLimit(request, {
-            ...VERIFY_RATE_LIMIT,
-            identifier: apiKeyContext ? apiKeyContext.id : undefined,
-        });
+        // Issue #229: Fail closed in production if Upstash is not configured.
+        // This endpoint is the most exposed to abuse (burns RPC quota and IPFS bandwidth).
+        if (
+            process.env.NODE_ENV === 'production' &&
+            getRateLimiterMode() === 'in-memory-unconfigured'
+        ) {
+            await logVerificationAttempt(supabase, request, token, 'server_error', 500, {
+                errorCategory: 'rate_limiter_unconfigured',
+                apiKeyContext,
+            });
+            return NextResponse.json(
+                { success: false, error: 'Server configuration error' },
+                { status: 500 },
+            );
+        }
+
+        const rateLimitResponse = await enforceRateLimit(
+            request,
+            apiKeyContext
+                ? { ...VERIFY_API_KEY_RATE_LIMIT, identifier: apiKeyContext.id }
+                : VERIFY_RATE_LIMIT
+        );
 
         if (rateLimitResponse) {
             return rateLimitResponse;

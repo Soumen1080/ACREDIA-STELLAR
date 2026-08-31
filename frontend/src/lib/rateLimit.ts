@@ -1,6 +1,34 @@
 import { NextResponse } from 'next/server';
 import { captureException } from './debug';
 
+// ---------------------------------------------------------------------------
+// Limiter mode — Issue #229
+// ---------------------------------------------------------------------------
+
+/**
+ * Three distinct states that callers and health checks can act on:
+ *
+ *   distributed          – Upstash is configured and reachable; limits are
+ *                          shared across all serverless instances.
+ *   in-memory-fallback   – Upstash is configured but temporarily unreachable;
+ *                          per-instance fallback is active for this invocation.
+ *   in-memory-unconfigured – UPSTASH_REDIS_* env vars were never set; the
+ *                          deployment is always per-instance (security gap in
+ *                          production).
+ */
+export type RateLimiterMode =
+    | 'distributed'
+    | 'in-memory-fallback'
+    | 'in-memory-unconfigured';
+
+/** Current limiter backend mode for this serverless instance. */
+let currentMode: RateLimiterMode = 'in-memory-unconfigured';
+
+/** Returns the active limiter mode. Safe to call from any server context. */
+export function getRateLimiterMode(): RateLimiterMode {
+    return currentMode;
+}
+
 type RateLimitOptions = {
     windowSeconds: number;
     maxRequests: number;
@@ -129,6 +157,9 @@ export function createUpstashRateLimitStore(): RateLimitStore | null {
                 const count = Number(countResult?.result ?? 1);
                 const ttl = Number(ttlResult?.result ?? windowSeconds);
 
+                // Upstash is reachable — mark limiter as distributed.
+                currentMode = 'distributed';
+
                 return {
                     count,
                     resetAt: Date.now() + Math.max(1, ttl) * 1000,
@@ -137,6 +168,8 @@ export function createUpstashRateLimitStore(): RateLimitStore | null {
                 // Degrade gracefully: log and fall back to per-instance memory store.
                 // This means limits may not be globally enforced during an outage, but
                 // legitimate traffic is never blocked by a Redis error.
+                // Mark as fallback so health checks and admin console can surface this.
+                currentMode = 'in-memory-fallback';
                 captureException(err, { context: 'rateLimit.increment', fallback: 'in-memory' });
                 return fallback.increment(key, windowSeconds);
             }
@@ -188,14 +221,43 @@ export function createUpstashRateLimitStore(): RateLimitStore | null {
     };
 }
 
-let activeStore: RateLimitStore = createUpstashRateLimitStore() ?? createInMemoryRateLimitStore(fixedBuckets);
+function initRateLimitStore(): RateLimitStore {
+    const upstashStore = createUpstashRateLimitStore();
+    if (upstashStore) {
+        // Upstash is configured — mode will be updated to 'distributed' on
+        // the first successful round-trip (inside increment). Until then,
+        // leave currentMode as 'in-memory-unconfigured' so health checks
+        // conservatively report the worst state.
+        return upstashStore;
+    }
+
+    // UPSTASH_REDIS_* env vars are absent — per-instance memory only.
+    currentMode = 'in-memory-unconfigured';
+
+    if (process.env.NODE_ENV === 'production') {
+        // Emit once per cold start. This will appear in Vercel Function logs
+        // and any observability pipeline, making the misconfiguration visible.
+        console.warn(
+            '[rate-limit] WARNING: Distributed rate limiting is NOT configured. ' +
+            'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are missing. ' +
+            'Rate limiting is per-instance (in-memory) only — limits are not ' +
+            'shared across serverless instances and reset on every cold start. ' +
+            'Set the Upstash variables in your deployment environment to enable ' +
+            'global distributed rate limiting.',
+        );
+    }
+
+    return createInMemoryRateLimitStore(fixedBuckets);
+}
+
+let activeStore: RateLimitStore = initRateLimitStore();
 
 /**
  * Re-read the Upstash environment variables and replace the active store.
  * Useful when env vars are injected after module load (e.g., in test bootstraps).
  */
 export function reinitRateLimitStore(): void {
-    activeStore = createUpstashRateLimitStore() ?? createInMemoryRateLimitStore(fixedBuckets);
+    activeStore = initRateLimitStore();
 }
 
 function readEnvOverride(prefix: string | undefined, name: 'WINDOW_SECONDS' | 'MAX_REQUESTS'): number | null {
