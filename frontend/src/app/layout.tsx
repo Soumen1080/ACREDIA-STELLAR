@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { headers } from 'next/headers';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import { Toaster } from '@/components/ui/sonner';
@@ -69,11 +70,17 @@ export const viewport: Viewport = {
     initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
     children,
 }: Readonly<{
     children: React.ReactNode;
 }>) {
+    // Reading headers() here opts this layout into dynamic rendering, which is
+    // what lets Next.js discover the per-request nonce (see src/middleware.ts)
+    // and automatically add it to the inline scripts Next.js itself injects for
+    // hydration — without this, script-src's 'nonce-...' would block them.
+    await headers();
+
     return (
         <html lang="en" className={inter.variable} suppressHydrationWarning>
             <body className="font-sans antialiased" suppressHydrationWarning>
