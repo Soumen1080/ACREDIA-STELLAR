@@ -8,11 +8,12 @@
  *
  * ## Resolution priority (stops at first match)
  * 1. `profiles.role` — the DB-backed source of truth (set by trusted processes)
- * 2. `institutions` table — existence of a row → `'institution'`
+ * 2. institution membership — an active `institution_users` row → `'institution'`
  * 3. `students` table — existence of a row → `'student'`
- * 4. `user_metadata.role` — **fallback only**; normalized via
- *    `normalizePublicSignupRole()` so it can never return `'admin'`
- * 5. Default → `'unknown'`
+ * 4. Default → `'unprovisioned'` for a signed-in user, `'unknown'` with no user
+ *
+ * There is no self-asserted metadata tier: public signup was removed in Issue
+ * #239, so a role is only ever set by whoever provisioned the account.
  *
  * @see {@link file://./../../../docs/auth-flow.md} for contributor documentation
  * @module

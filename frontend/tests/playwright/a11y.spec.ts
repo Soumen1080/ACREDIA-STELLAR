@@ -41,9 +41,11 @@ test('core pages pass WCAG 2.1 AA accessibility audit', async ({ page }) => {
     results = await runAxe(page);
     expect(results.violations, `Login page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
 
-    await page.goto('/auth/register?role=institution');
+    // Registration was removed (Issue #239); contact is where onboarding
+    // starts now, so that is the page worth auditing.
+    await page.goto('/contact');
     results = await runAxe(page);
-    expect(results.violations, `Register page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
+    expect(results.violations, `Contact page violations: ${JSON.stringify(results.violations, null, 2)}`).toEqual([]);
 
     // Authenticated institution state
     const institutionState = createE2eState({

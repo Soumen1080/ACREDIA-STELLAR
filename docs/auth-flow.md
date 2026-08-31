@@ -87,11 +87,9 @@ Priority  Source                  Description
   3       students table          Row exists with matching auth_user_id
                                   → returns 'student'.
 
-  4       user_metadata.role      Signup metadata fallback. Normalized via
-                                  normalizePublicSignupRole() so it can
-                                  NEVER return 'admin'.
-
-  5       (default)               → returns 'unknown'.
+  4       (default)               → returns 'unprovisioned' for a signed-in
+                                  user with no role rows, 'unknown' when
+                                  there is no user at all.
 ```
 
 > [!IMPORTANT]
@@ -119,12 +117,8 @@ export async function resolveUserRole(
     // 3. Students table
     if (await hasRowIn(client, 'students', user.id)) return 'student';
 
-    // 4. Metadata fallback (never returns 'admin')
-    const metadataRole = user.user_metadata?.role;
-    if (metadataRole) return normalizePublicSignupRole(metadataRole);
-
-    // 5. Nothing matched
-    return 'unknown';
+    // 4. Nothing matched — the account exists but was never provisioned
+    return 'unprovisioned';
 }
 ```
 
@@ -340,25 +334,23 @@ const role = await resolveUserRoleServer(client, userId);
 ## 7. Admin Provisioning
 
 > [!CAUTION]
-> Admin accounts can **NEVER** be created through public signup. The
-> `normalizePublicSignupRole()` function in `adminAccess.ts` strips any
-> `'admin'` value and defaults to `'student'`.
+> Admin accounts can **NEVER** be self-created. Since Issue #239 removed public
+> signup there is no client path that creates an account of any kind, and
+> `profiles.role` — writable only by trusted server-side processes — is the sole
+> source of the `'admin'` role.
 
-### How `normalizePublicSignupRole()` works
+### Why there is no signup role to normalize
 
-```ts
-// src/lib/adminAccess.ts
-export function normalizePublicSignupRole(role: unknown): PublicSignupRole {
-    return role === 'institution' ? 'institution' : 'student';
-}
-```
+Acredia used to accept a self-asserted `role` in signup metadata and clamp it
+with `normalizePublicSignupRole()`, so a stranger could never claim `'admin'`.
+Public signup is gone, so both the claim and the clamp are gone with it:
 
-Any value other than `'institution'` — including `'admin'`, `null`, `undefined`,
-or random strings — is normalized to `'student'`. This function is called:
+- `/auth/register` no longer exists (stale links redirect to `/contact`).
+- `signUp()` has been removed from `src/lib/supabase.ts`.
+- The signup mirror triggers that created rows from auth metadata are dropped.
 
-- In `signUp()` (`src/lib/supabase.ts`) before setting `user_metadata`.
-- In `resolveUserRole()` (`src/lib/roleResolver.ts`) at the metadata fallback
-  step.
+A role is now set only by whoever provisioned the account: an Acredia admin for
+institutions, an institution for its students.
 
 ### To provision a new admin
 
@@ -452,8 +444,8 @@ tokens and proactive session renewal. Always prefer it over the raw Supabase
 | [`src/lib/roleResolver.ts`](src/lib/roleResolver.ts)           | Shared role resolution logic (`resolveUserRole`, `resolveUserRoleClient`, `resolveUserRoleServer`)     |
 | [`src/contexts/AuthContext.tsx`](src/contexts/AuthContext.tsx) | Client-side auth state provider (`AuthProvider`, `useAuth`, `ProtectedRoute`)                          |
 | [`src/lib/serverAuth.ts`](src/lib/serverAuth.ts)               | Server-side auth guards (`requireAuthenticatedRequest`, `requireInstitutionRequest`, `requireAdminRequest`, `getServiceRoleClient`) |
-| [`src/lib/adminAccess.ts`](src/lib/adminAccess.ts)             | Admin setup helpers, `normalizePublicSignupRole()`                                                     |
-| [`src/lib/supabase.ts`](src/lib/supabase.ts)                   | Supabase browser client, `signUp`, `signIn`, `signOut`, `safeGetSession`                               |
+| [`src/lib/adminAccess.ts`](src/lib/adminAccess.ts)             | Admin setup helpers                                                                                    |
+| [`src/lib/supabase.ts`](src/lib/supabase.ts)                   | Supabase browser client, `signIn`, `signOut`, `safeGetSession` (no `signUp` — provisioning is closed)   |
 
 ---
 

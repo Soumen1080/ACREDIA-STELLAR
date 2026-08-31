@@ -125,6 +125,8 @@ export function sanitizeAuthRedirect(next: string | null | undefined) {
         !decodedNext.startsWith('/') ||
         decodedNext.startsWith('//') ||
         decodedNext.startsWith('/auth/login') ||
+        // Removed with public signup (Issue #239). Still rejected so a stale
+        // link cannot bounce a signed-in user to a route that no longer exists.
         decodedNext.startsWith('/auth/register') ||
         decodedNext.startsWith('/auth/forgot-password') ||
         decodedNext.startsWith('/auth/reset-password')

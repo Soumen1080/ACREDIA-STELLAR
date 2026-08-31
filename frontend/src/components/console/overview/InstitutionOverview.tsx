@@ -30,7 +30,7 @@ export function InstitutionOverview() {
     }
 
     if (!profile.institutionId) {
-        return <InstitutionUnavailableCard />;
+        return <InstitutionUnavailableCard unlinked={profile.unlinked} />;
     }
 
     return (

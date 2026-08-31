@@ -9,6 +9,22 @@ const nextConfig: NextConfig = {
         return buildSecurityHeaders(process.env.NODE_ENV === 'production');
     },
 
+    // ── Redirects ───────────────────────────────────────────────────────────
+    async redirects() {
+        return [
+            {
+                // Public signup was removed (Issue #239): Acredia provisions
+                // institutions, and institutions provision students. Bookmarks
+                // and stale links land on contact rather than a 404, but the
+                // route itself no longer exists and grants nothing. Kept
+                // temporary so the path is never cached as permanently moved.
+                source: '/auth/register',
+                destination: '/contact',
+                permanent: false,
+            },
+        ];
+    },
+
     turbopack: {},
     webpack: (config, { isServer }) => {
         // Ignore test files and development dependencies from thread-stream
