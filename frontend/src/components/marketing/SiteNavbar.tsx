@@ -166,7 +166,7 @@ export function SiteNavbar() {
                         <Link href="/auth/login">Sign in</Link>
                     </Button>
                     <Button asChild size="sm">
-                        <Link href="/auth/register">Get started</Link>
+                        <Link href="/contact">Request access</Link>
                     </Button>
                 </div>
 
@@ -231,7 +231,7 @@ export function SiteNavbar() {
                                 <Link href="/auth/login">Sign in</Link>
                             </Button>
                             <Button asChild>
-                                <Link href="/auth/register">Get started</Link>
+                                <Link href="/contact">Request access</Link>
                             </Button>
                         </div>
                     </div>

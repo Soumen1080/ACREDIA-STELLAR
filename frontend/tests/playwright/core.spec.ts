@@ -11,7 +11,7 @@ const issuerWallet = 'GAcrediaIssuerWallet0000000000000000000000000000001';
 const adminWallet = 'GAcrediaAdminWallet00000000000000000000000000000001';
 const studentWallet = 'GBSVJNVIAGQEAK3WAAVGXSMT7BMLI4SHAJWKKMRCMJIYG7XESR4ANDZD';
 
-test('registers, issues, verifies, and revokes a credential', async ({ page }) => {
+test('issues, verifies, and revokes a credential', async ({ page }) => {
     const state = createE2eState({
         role: 'institution',
         walletAddress: issuerWallet,
@@ -27,15 +27,9 @@ test('registers, issues, verifies, and revokes a credential', async ({ page }) =
     await seedE2eState(page, state);
     await installE2eRoutes(page);
 
-    await page.goto('/auth/register?role=institution');
-    await page.getByRole('button', { name: 'Institution' }).click();
-    await page.getByLabel('Institution name').fill('Acredia Academy');
-    await page.getByLabel('Email').fill('issuer@acredia.test');
-    await page.getByLabel('Password', { exact: true }).fill('Credential1');
-    await page.getByLabel('Confirm password', { exact: true }).fill('Credential1');
-    await page.getByRole('button', { name: 'Create account' }).click();
-    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
-
+    // Public signup was removed (Issue #239): the institution and its POC are
+    // provisioned by an admin, so the journey starts from an account that
+    // already exists rather than from a registration form.
     await page.goto('/dashboard');
     await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible();
 

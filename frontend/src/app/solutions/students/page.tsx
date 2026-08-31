@@ -22,7 +22,7 @@ export default function StudentsSolutionPage() {
             title="Own your academic"
             titleHighlight="achievements forever."
             description="Your credentials, your control. Access, share, and verify your academic achievements anytime, anywhere — permanently secured on the Stellar blockchain."
-            primaryCta={{ label: 'Create free account', href: '/auth/register?role=student' }}
+            primaryCta={{ label: 'Learn more', href: '/contact?role=student' }}
             features={[
                 {
                     icon: InfinityIcon,

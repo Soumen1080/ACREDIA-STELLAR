@@ -22,7 +22,7 @@ export default function InstitutionsSolutionPage() {
             title="Streamline credential"
             titleHighlight="issuance & management."
             description="Issue blockchain-secured credentials in minutes. Reduce administrative burden, eliminate fraud, and give your students lifetime ownership of their achievements."
-            primaryCta={{ label: 'Get started', href: '/auth/register?role=institution' }}
+            primaryCta={{ label: 'Request access', href: '/contact?role=institution' }}
             features={[
                 {
                     icon: Upload,

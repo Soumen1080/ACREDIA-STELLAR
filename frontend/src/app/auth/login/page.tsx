@@ -136,13 +136,11 @@ function LoginForm() {
             footer={
                 <div className="space-y-4 text-center">
                     <p className="text-sm text-muted-foreground">
-                        Don&apos;t have an account?{' '}
-                        <Link
-                            href={`/auth/register?next=${encodeURIComponent(nextRedirect)}`}
-                            className="font-semibold text-primary hover:underline"
-                        >
-                            Create one
-                        </Link>
+                        Accounts are created by your administrator.{' '}
+                        <Link href="/contact" className="font-semibold text-primary hover:underline">
+                            Contact us
+                        </Link>{' '}
+                        to get set up.
                     </p>
                     <Link
                         href="/auth/admin-login"

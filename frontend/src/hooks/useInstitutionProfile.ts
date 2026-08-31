@@ -22,11 +22,21 @@ export interface InstitutionProfile {
     address: string | null;
     loading: boolean;
     linkingWallet: boolean;
+    /**
+     * True when the signed-in user has an institution role but no institution
+     * record. Since Issue #239 this is a provisioning error to surface, not a
+     * cue to create one.
+     */
+    unlinked: boolean;
 }
 
 /**
- * Loads (and, for a first-time signup, creates) the signed-in user's
- * institution row, and keeps the connected wallet linked to it.
+ * Loads the signed-in user's institution row and keeps the connected wallet
+ * linked to it.
+ *
+ * Never creates the row: institutions are provisioned by an Acredia admin
+ * (Issue #239), so a user with no institution is reported through `unlinked`
+ * rather than silently given one.
  *
  * This used to live inline in `/dashboard`; every institution console route
  * needs it now that the tabs became real pages.
@@ -39,11 +49,14 @@ export function useInstitutionProfile(): InstitutionProfile {
     const [institutionWalletAddress, setInstitutionWalletAddress] = useState<string | null>(null);
     const [institutionStatus, setInstitutionStatus] = useState<string>('pending');
     const [loadingInstitution, setLoadingInstitution] = useState(true);
+    const [unlinked, setUnlinked] = useState(false);
     const [linkingInstitutionWallet, setLinkingInstitutionWallet] = useState(false);
     const walletLinkInFlight = useRef<string | null>(null);
 
     useEffect(() => {
         const fetchInstitutionId = async () => {
+            setUnlinked(false);
+
             if (!user || userRole !== 'institution') {
                 setInstitutionId('');
                 setInstitutionWalletAddress(null);
@@ -79,44 +92,12 @@ export function useInstitutionProfile(): InstitutionProfile {
                     return;
                 }
 
-                debugWarn('Institution record was missing and will be created.');
-                toast.warning('Institution record not found. Creating profile...');
-
-                const { data: newInstitution, error: createError } = await supabase
-                    .from('institutions')
-                    .insert([
-                        {
-                            auth_user_id: user.id,
-                            email: user.email,
-                            name: user.email?.split('@')[0] || 'Institution',
-                        },
-                    ])
-                    .select('id, wallet_address, status')
-                    .single();
-
-                if (!createError && newInstitution?.id) {
-                    await supabase.from('institution_users').insert([
-                        {
-                            institution_id: newInstitution.id,
-                            auth_user_id: user.id,
-                            role: 'owner',
-                            status: 'active',
-                        },
-                    ]);
-                }
-
-                if (createError) {
-                    captureException(createError, { context: 'createInstitution' });
-                    toast.error('Failed to create institution profile');
-                    return;
-                }
-
-                if (newInstitution) {
-                    setInstitutionId(newInstitution.id);
-                    setInstitutionWalletAddress(newInstitution.wallet_address ?? null);
-                    setInstitutionStatus(newInstitution.status || 'pending');
-                    toast.success('Institution profile created');
-                }
+                // A missing institution is an error state, never a silent
+                // create (Issue #239). Accounts are provisioned by an admin, so
+                // an unlinked one means the provisioning is incomplete — not
+                // that we should invent a record named after an email.
+                debugWarn('No institution is linked to this account.');
+                setUnlinked(true);
             } catch (error) {
                 captureException(error, { context: 'fetchInstitutionId_catch' });
                 toast.error('An unexpected error occurred');
@@ -201,5 +182,6 @@ export function useInstitutionProfile(): InstitutionProfile {
         address,
         loading: loadingInstitution,
         linkingWallet: linkingInstitutionWallet,
+        unlinked,
     };
 }

@@ -269,8 +269,8 @@ export default function AboutPage() {
                                 </p>
                                 <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
                                     <Button asChild size="xl" variant="gold">
-                                        <Link href="/auth/register">
-                                            Get started
+                                        <Link href="/contact">
+                                            Request access
                                             <ArrowRight className="h-5 w-5" />
                                         </Link>
                                     </Button>

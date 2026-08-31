@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { normalizePublicSignupRole, type PublicSignupRole } from './adminAccess';
 import { normalizeEmail } from './authFlow';
 import { getE2eState } from './e2e';
 import { runtimeConfig } from './runtimeConfig';
@@ -84,79 +83,11 @@ export async function safeGetSession() {
 }
 
 // Direct exports for easier imports
-type PublicSignupData = {
-    name?: string;
-    role?: unknown;
-    [key: string]: unknown;
-};
-
-type PublicSignupOptions = {
-    data?: PublicSignupData;
-    emailRedirectTo?: string;
-};
-
-export async function signUp(email: string, password: string, options?: PublicSignupOptions) {
-    const e2eState = getE2eState();
-    if (e2eState?.enabled) {
-        const user = {
-            id: 'e2e-user',
-            email: normalizeEmail(email),
-            user_metadata: options?.data ?? {},
-        };
-
-        return {
-            data: { user, session: null },
-            error: null,
-        };
-    }
-
-    const signupData = options?.data
-        ? {
-              ...options.data,
-              role: normalizePublicSignupRole(options.data.role),
-          }
-        : undefined;
-
-    const { data, error } = await supabase.auth.signUp({
-        email: normalizeEmail(email),
-        password,
-        options: {
-            ...options,
-            data: signupData,
-        },
-    });
-
-    // Create student or institution record after successful signup
-    if (!error && data.user && signupData) {
-        const { role, name } = signupData;
-        const userId = data.user.id;
-        const email = data.user.email!;
-
-        if (role === 'student') {
-            await supabase.from('students').insert([{ auth_user_id: userId, name, email }]);
-        } else if (role === 'institution') {
-            const { data: institution } = await supabase
-                .from('institutions')
-                .insert([{ auth_user_id: userId, name, email }])
-                .select('id')
-                .single();
-
-            // The membership row, not the column, is what grants access.
-            if (institution?.id) {
-                await supabase.from('institution_users').insert([
-                    {
-                        institution_id: institution.id,
-                        auth_user_id: userId,
-                        role: 'owner',
-                        status: 'active',
-                    },
-                ]);
-            }
-        }
-    }
-
-    return { data, error };
-}
+//
+// There is no `signUp` here by design. Acredia is closed and delegated
+// (Issue #239): admins provision institutions, institutions provision
+// students. No client path may create an account, so the only way in is a
+// provisioner-issued invite.
 
 export async function signIn(email: string, password: string) {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -215,19 +146,6 @@ export async function signOut() {
 
 // Helper functions for authentication
 export const authHelpers = {
-    async signUp(email: string, password: string, role: PublicSignupRole) {
-        const { data, error } = await supabase.auth.signUp({
-            email: normalizeEmail(email),
-            password,
-            options: {
-                data: {
-                    role: normalizePublicSignupRole(role),
-                },
-            },
-        });
-        return { data, error };
-    },
-
     async signIn(email: string, password: string) {
         const { data, error } = await supabase.auth.signInWithPassword({
             email: normalizeEmail(email),

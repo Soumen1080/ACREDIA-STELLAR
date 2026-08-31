@@ -49,7 +49,7 @@ export function InstitutionConsolePage({
             return <InstitutionProfileSkeleton />;
         }
         if (!profile.institutionId) {
-            return <InstitutionUnavailableCard />;
+            return <InstitutionUnavailableCard unlinked={profile.unlinked} />;
         }
         if (requireVerified && profile.status !== 'verified') {
             return <VerificationRequiredCard status={profile.status} />;

@@ -80,19 +80,29 @@ export function InstitutionProfileSkeleton() {
     );
 }
 
-/** Terminal state: the institution row could neither be loaded nor created. */
-export function InstitutionUnavailableCard() {
+/**
+ * Terminal state: the institution row could not be loaded.
+ *
+ * `unlinked` distinguishes the two ways this happens. Since Issue #239 removed
+ * self-signup, an account with no institution is a half-finished provisioning
+ * — the administrator has to finish it — rather than a transient load failure
+ * a reload could fix. Saying "reload the page" there would be dead advice.
+ */
+export function InstitutionUnavailableCard({ unlinked = false }: { unlinked?: boolean }) {
     return (
         <Card className="border-destructive/25 bg-destructive/8 p-6">
             <div className="flex items-start gap-3">
                 <AlertCircle className="mt-0.5 h-6 w-6 shrink-0 text-destructive" />
                 <div className="min-w-0">
                     <h3 className="text-base font-semibold text-foreground">
-                        Institution profile unavailable
+                        {unlinked
+                            ? 'Account not linked to an institution'
+                            : 'Institution profile unavailable'}
                     </h3>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        We could not load your institution profile. Reload the page, and contact
-                        support if the problem persists.
+                        {unlinked
+                            ? 'Your account is not linked to an institution. Contact your Acredia administrator to finish setting it up.'
+                            : 'We could not load your institution profile. Reload the page, and contact support if the problem persists.'}
                     </p>
                 </div>
             </div>

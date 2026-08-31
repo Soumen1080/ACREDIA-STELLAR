@@ -1,12 +1,10 @@
-import type { AppRole } from '@/types';
-
 const TRUSTED_ADMIN_ENV_VARS = ['ADMIN_EMAIL_ALLOWLIST', 'SUPABASE_SERVICE_ROLE_KEY'];
-export type PublicSignupRole = 'institution' | 'student';
 
 export function adminSetupRequirements() {
     return TRUSTED_ADMIN_ENV_VARS;
 }
 
-export function normalizePublicSignupRole(role: unknown): AppRole {
-    return role === 'institution' ? 'institution' : 'student';
-}
+// `normalizePublicSignupRole` was removed with public signup (Issue #239).
+// A role is no longer something a user can assert about themselves at account
+// creation: it is set by whoever provisioned the account, so there is nothing
+// left to clamp.

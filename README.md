@@ -173,10 +173,10 @@ Acredia connects four roles around a single, shared source of truth. See the
 
 | Role | What they get | How they use it |
 |---|---|---|
-| **🏛 Institutions** (universities, colleges, bootcamps, cert bodies) | Fraud-proof credentials and near-zero verification overhead. | 1. Get approved as an authorized issuer → 2. Connect a Stellar wallet → 3. Fill the issuance form (student, degree, subjects, document) → 4. Sign the transaction to mint the credential on-chain and pin the document to IPFS. Revoke anytime. |
-| **🎓 Students / graduates** | Lifelong, portable ownership of their achievements. | 1. Sign up and link a wallet → 2. Receive credentials directly in the dashboard → 3. Share a verification link or QR code with employers → 4. Export/download the credential whenever needed. |
+| **🏛 Institutions** (universities, colleges, bootcamps, cert bodies) | Fraud-proof credentials and near-zero verification overhead. | 1. Get provisioned by an Acredia admin and accept your invite → 2. Connect a Stellar wallet → 3. Fill the issuance form (student, degree, subjects, document) → 4. Sign the transaction to mint the credential on-chain and pin the document to IPFS. Revoke anytime. |
+| **🎓 Students / graduates** | Lifelong, portable ownership of their achievements. | 1. Receive an invite from your institution and link a wallet → 2. Receive credentials directly in the dashboard → 3. Share a verification link or QR code with employers → 4. Export/download the credential whenever needed. |
 | **✅ Verifiers** (employers, ATS, admissions) | Instant, free authenticity checks. | 1. Open the shared link or scan the QR (or enter a token ID) on `/verify` → 2. See authenticity, revocation status, and credential details in seconds — **no account required**. |
-| **🛡 Admins / operators** | Governance of who can be trusted to issue. | 1. Review institution applications → 2. Authorize legitimate issuers on-chain → 3. Monitor issuance/verification statistics. |
+| **🛡 Admins / operators** | Governance of who can be trusted to issue. | 1. Provision institutions and issue invite links → 2. Authorize legitimate issuers on-chain → 3. Monitor issuance/verification statistics. |
 
 ---
 
@@ -779,7 +779,25 @@ Acredia requires custom SMTP to avoid the strict ~3/hour send cap on Supabase's 
 
 ## 📖 Usage Guide
 
+> **Access model.** Acredia is closed and delegated: there is no public sign-up.
+> Acredia admins provision institutions, institutions provision their students,
+> and each new account is reached through a single-use invite link on which the
+> recipient sets their own password. Credential verification at `/verify` stays
+> fully public and needs no account at all.
+
 ### For Administrators
+
+**Provisioning an Institution**
+
+1. Navigate to Admin Dashboard > Institutions
+2. Click "Add institution"
+3. Enter the institution name, POC name and email, and issuer wallet address
+4. Save — the institution is created as `pending` and an invite link is generated
+5. Copy the invite link (it is also emailed) and send it to the POC
+6. The POC opens the link and sets their own password; no Acredia staff ever sees it
+
+Creating the record deliberately does **not** authorize the wallet on-chain —
+that is the separate, owner-signed step below.
 
 **Authorizing Institutions**
 
@@ -794,7 +812,7 @@ Acredia requires custom SMTP to avoid the strict ~3/hour send cap on Supabase's 
 
 **Issuing a Credential**
 
-1. Login with authorized institution account
+1. Login with your provisioned institution account
 2. Go to Dashboard > Issue Credential tab
 3. Fill in student details:
    - Student Name
@@ -823,7 +841,7 @@ Acredia requires custom SMTP to avoid the strict ~3/hour send cap on Supabase's 
 
 **Viewing Your Credentials**
 
-1. Login with student account
+1. Login with the student account your institution provisioned for you
 2. Dashboard displays all your credentials
 3. Click on any credential to see:
    - Institution details
@@ -884,7 +902,7 @@ frontend/
 │   │   │       └── update-authorization/   # Authorization sync
 │   │   ├── auth/
 │   │   │   ├── login/             # Student/Institution login
-│   │   │   ├── register/          # User registration
+│   │   │   ├── accept-invite/     # Invited POC sets their own password
 │   │   │   ├── admin-login/       # Admin authentication
 │   │   │   └── admin-setup/       # Initial admin setup
 │   │   ├── dashboard/
